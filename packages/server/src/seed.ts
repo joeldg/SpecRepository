@@ -59,8 +59,60 @@ function insertPublishedSpec(db: Db, projectTypeId: string, spec: SeedSpec): voi
   ).run(uuid(), id, spec.content, ts);
 }
 
+/** Default conformance templates; seeded independently so existing databases pick them up. */
+function seedTemplates(db: Db): void {
+  const existing = db.prepare("SELECT COUNT(*) AS n FROM spec_templates").get() as { n: number };
+  if (existing.n > 0) return;
+  const insert = db.prepare(
+    `INSERT INTO spec_templates (id, filename, required_sections, content_template, description, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  );
+  const ts = now();
+  insert.run(
+    uuid(),
+    "DESIGN.md",
+    JSON.stringify(["System Architecture", "Design Patterns", "Data Flow"]),
+    `# <Project> — Design Specification
+
+## System Architecture
+
+_Describe the components and how they interact._
+
+## Design Patterns
+
+_List the high-level patterns in use and why._
+
+## Data Flow
+
+_Describe how data moves through the system._
+`,
+    "Every DESIGN.md must document architecture, patterns, and data flow.",
+    ts,
+    ts
+  );
+  insert.run(
+    uuid(),
+    "STRUCTURE.md",
+    JSON.stringify(["Entry Points"]),
+    `# <Project> — Repository Structure
+
+| Path | Purpose |
+| --- | --- |
+| \`src/\` | _purpose_ |
+
+## Entry Points
+
+_List the main entry points and configuration files._
+`,
+    "Every STRUCTURE.md must map directories and list entry points.",
+    ts,
+    ts
+  );
+}
+
 /** Seeds the Thinkom demo configuration. No-op if any project type already exists. */
 export function seed(db: Db): boolean {
+  seedTemplates(db);
   const existing = db.prepare("SELECT COUNT(*) AS n FROM project_types").get() as { n: number };
   if (existing.n > 0) return false;
 

@@ -1,13 +1,18 @@
 import type { FastifyInstance } from "fastify";
-import type { FeedbackErrorType, Spec } from "@specregistry/shared";
+import type { AgentFeedback, FeedbackErrorType, Spec } from "@specregistry/shared";
 import { now, uuid } from "../db.js";
 import { HttpError, requireOneOf, requireProjectType, requireSpec, requireString } from "../helpers.js";
+import { draftFix } from "../lib/aifix.js";
+import { createChangeRequest } from "../lib/changes.js";
+import { dispatchWebhooks, recordUsage } from "../lib/events.js";
+import { searchSpecs } from "../lib/search.js";
 
 export async function feedbackRoutes(app: FastifyInstance): Promise<void> {
   // Agent-facing read endpoint: latest published specs (global + project type), full content.
   app.get("/ai/specs/:projectType", async (req) => {
     const { projectType } = req.params as { projectType: string };
     const pt = requireProjectType(app.db, projectType);
+    recordUsage(app.db, "agent_read", pt.id);
     const specs = app.db
       .prepare(
         `SELECT s.*, pt.name AS project_type_name, pt.scope AS project_type_scope
@@ -49,8 +54,57 @@ export async function feedbackRoutes(app: FastifyInstance): Promise<void> {
         description,
         now()
       );
+    await dispatchWebhooks(
+      app.db,
+      "feedback.created",
+      `${agentIdentifier} flagged ${spec.filename}@${specVersion}: ${errorType}`,
+      { feedback_id: id, spec_id: spec.id, filename: spec.filename, error_type: errorType }
+    );
     reply.code(201);
     return app.db.prepare("SELECT * FROM agent_feedback WHERE id = ?").get(id);
+  });
+
+  // Lexical RAG endpoint: section-level search over published specs.
+  app.get("/ai/search", async (req) => {
+    const { q, project_type } = req.query as { q?: string; project_type?: string };
+    if (!q || !q.trim()) throw new HttpError(400, "Missing query parameter: q");
+    const pt = project_type ? requireProjectType(app.db, project_type) : undefined;
+    recordUsage(app.db, "search", pt?.id, q);
+    return { query: q, results: searchSpecs(app.db, q, pt?.id) };
+  });
+
+  // Close the loop: have Claude draft a revision that resolves the feedback,
+  // then submit it through the normal review workflow as a pending change request.
+  app.post("/ai/feedback/:id/draft-fix", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const feedback = app.db.prepare("SELECT * FROM agent_feedback WHERE id = ?").get(id) as
+      | AgentFeedback
+      | undefined;
+    if (!feedback) throw new HttpError(404, `Unknown feedback: ${id}`);
+    if (feedback.status === "resolved") throw new HttpError(409, "Feedback is already resolved");
+    const spec = requireSpec(app.db, feedback.spec_id);
+    if (spec.status === "pending_review") {
+      throw new HttpError(409, "Spec already has a pending change request; review it first");
+    }
+
+    const revised = await draftFix(spec, feedback);
+    const cr = createChangeRequest(app.db, {
+      spec,
+      proposedContent: revised,
+      // Resolving a contradiction changes guidance; clarifications are patches.
+      versionDelta: feedback.error_type === "ambiguity" ? "patch" : "minor",
+      proposedBy: `claude-draft (for ${feedback.agent_identifier})`,
+      summary: `AI-drafted fix for ${feedback.error_type} feedback: ${feedback.description.slice(0, 120)}`,
+    });
+    app.db.prepare("UPDATE agent_feedback SET status = 'acknowledged' WHERE id = ? AND status = 'open'").run(id);
+    await dispatchWebhooks(app.db, "review.submitted", `${spec.filename}: AI-drafted fix awaiting review`, {
+      change_request_id: cr.id,
+      spec_id: spec.id,
+      filename: spec.filename,
+      feedback_id: id,
+    });
+    reply.code(201);
+    return cr;
   });
 
   app.get("/ai/feedback", async (req) => {

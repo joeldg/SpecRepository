@@ -8,6 +8,9 @@ import ReviewsPage from "./pages/ReviewsPage";
 import ReviewDetailPage from "./pages/ReviewDetailPage";
 import FeedbackPage from "./pages/FeedbackPage";
 import ProjectTypesPage from "./pages/ProjectTypesPage";
+import SearchPage from "./pages/SearchPage";
+import TemplatesPage from "./pages/TemplatesPage";
+import SettingsPage from "./pages/SettingsPage";
 
 export default function App() {
   const [author, setAuthorState] = useState(getAuthor());
@@ -34,8 +37,17 @@ export default function App() {
         <NavLink to="/feedback" className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
           AI Feedback
         </NavLink>
+        <NavLink to="/search" className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
+          Search
+        </NavLink>
         <NavLink to="/project-types" className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
           Project Types
+        </NavLink>
+        <NavLink to="/templates" className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
+          Templates
+        </NavLink>
+        <NavLink to="/settings" className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
+          Settings
         </NavLink>
         <div className="spacer" />
         <div className="author-box">
@@ -57,7 +69,10 @@ export default function App() {
           <Route path="/reviews" element={<ReviewsPage />} />
           <Route path="/reviews/:id" element={<ReviewDetailPage />} />
           <Route path="/feedback" element={<FeedbackPage />} />
+          <Route path="/search" element={<SearchPage />} />
           <Route path="/project-types" element={<ProjectTypesPage />} />
+          <Route path="/templates" element={<TemplatesPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>
     </div>

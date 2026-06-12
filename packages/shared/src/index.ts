@@ -98,6 +98,62 @@ export interface StubPromptResponse {
   }>;
 }
 
+export interface SpecTemplate {
+  id: string;
+  filename: string;
+  /** JSON array of required heading texts */
+  required_sections: string;
+  content_template: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Webhook {
+  id: string;
+  url: string;
+  /** JSON array of subscribed event names; empty = all events */
+  events: string;
+  format: "json" | "slack";
+  active: number;
+  created_at: string;
+}
+
+export interface RepoSubscription {
+  id: string;
+  project_type_id: string;
+  /** "owner/name" */
+  repo: string;
+  branch: string;
+  base_path: string;
+  created_at: string;
+}
+
+export interface SyncJob {
+  id: string;
+  subscription_id: string;
+  spec_id: string;
+  version: string;
+  status: "pending" | "done" | "error";
+  detail: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SyncCheckRequest {
+  project_type: string;
+  specs: Array<{ filename: string; version: string }>;
+}
+
+export interface SyncCheckResponse {
+  project_type: string;
+  up_to_date: string[];
+  outdated: Array<{ filename: string; local_version: string; latest_version: string }>;
+  missing_locally: Array<{ filename: string; latest_version: string }>;
+  not_on_server: string[];
+  drift: boolean;
+}
+
 /** Bump a semantic version string by the given delta. */
 export function bumpVersion(version: string, delta: VersionDelta): string {
   const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);

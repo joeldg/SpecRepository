@@ -1,6 +1,5 @@
 import type { FastifyInstance } from "fastify";
 import AdmZip from "adm-zip";
-import { createTwoFilesPatch } from "diff";
 import type { Spec, SpecVersion, VersionDelta } from "@specregistry/shared";
 import { now, uuid } from "../db.js";
 import {
@@ -11,6 +10,10 @@ import {
   requireSpec,
   requireString,
 } from "../helpers.js";
+import { createChangeRequest } from "../lib/changes.js";
+import { dispatchWebhooks, recordUsage } from "../lib/events.js";
+import { lintContent } from "../lib/lint.js";
+import { reindexSpec } from "../lib/search.js";
 
 const SUMMARY_SELECT = `
   SELECT s.id, s.project_type_id, s.filename, s.current_version, s.status,
@@ -65,6 +68,7 @@ export async function specRoutes(app: FastifyInstance): Promise<void> {
       Buffer.from(JSON.stringify({ project_type: pt.name, fetched_at: now(), specs: manifest }, null, 2))
     );
 
+    recordUsage(app.db, "download", pt.id);
     reply
       .header("content-type", "application/zip")
       .header("content-disposition", `attachment; filename="${pt.name.replace(/[^\w.-]+/g, "_")}-specs.zip"`);
@@ -150,7 +154,15 @@ export async function specRoutes(app: FastifyInstance): Promise<void> {
         .run(uuid(), spec.id, version, spec.content, publishedBy, ts);
     });
     publish();
-    return requireSpec(app.db, spec.id);
+    const published = requireSpec(app.db, spec.id);
+    reindexSpec(app.db, published);
+    const lint = lintContent(app.db, published.filename, published.content);
+    await dispatchWebhooks(app.db, "spec.published", `${published.filename} published as 1.0.0 by ${publishedBy}`, {
+      spec_id: published.id,
+      filename: published.filename,
+      version,
+    });
+    return { ...published, lint };
   });
 
   // Submit a markdown change request; the spec enters pending_review.
@@ -161,32 +173,20 @@ export async function specRoutes(app: FastifyInstance): Promise<void> {
     const proposedBy = requireString(body, "proposed_by");
     const versionDelta = requireOneOf(body, "version_delta", ["major", "minor", "patch"] as const satisfies readonly VersionDelta[]);
     const spec = requireSpec(app.db, specId);
-    if (spec.status === "draft") {
-      throw new HttpError(409, "Draft specs are edited directly (PUT /specs/:id), not reviewed");
-    }
-    if (proposedContent === spec.content) {
-      throw new HttpError(400, "Proposed content is identical to the current published content");
-    }
-
-    const diff = createTwoFilesPatch(
-      `${spec.filename}@${spec.current_version}`,
-      `${spec.filename}@proposed`,
-      spec.content,
-      proposedContent
-    );
-    const id = uuid();
-    const ts = now();
-    const submit = app.db.transaction(() => {
-      app.db
-        .prepare(
-          `INSERT INTO change_requests (id, spec_id, proposed_by, version_delta, diff, proposed_content, summary, status, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)`
-        )
-        .run(id, spec.id, proposedBy, versionDelta, diff, proposedContent, (body.summary as string) ?? null, ts);
-      app.db.prepare("UPDATE specs SET status = 'pending_review', updated_at = ? WHERE id = ?").run(ts, spec.id);
+    const cr = createChangeRequest(app.db, {
+      spec,
+      proposedContent,
+      versionDelta,
+      proposedBy,
+      summary: (body.summary as string) ?? null,
     });
-    submit();
+    await dispatchWebhooks(
+      app.db,
+      "review.submitted",
+      `${spec.filename}: ${versionDelta} change proposed by ${proposedBy}`,
+      { change_request_id: cr.id, spec_id: spec.id, filename: spec.filename }
+    );
     reply.code(201);
-    return app.db.prepare("SELECT * FROM change_requests WHERE id = ?").get(id);
+    return cr;
   });
 }

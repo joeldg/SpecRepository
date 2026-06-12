@@ -15,7 +15,21 @@
       "Bash(curl -s http://localhost:4000/)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:4000/specs)",
       "mcp__Claude_Preview__preview_start",
-      "Bash(kill 41886)"
+      "Bash(kill 41886)",
+      "Bash(git remote *)",
+      "Bash(git ls-remote *)",
+      "Bash(git fetch *)",
+      "Bash(git ls-tree *)",
+      "Bash(git -c user.name=\"joeldg\" -c user.email=\"joeldg@gmail.com\" merge origin/main --allow-unrelated-histories --no-edit -m \"Merge GitHub-initialized main \\(LICENSE\\)\")",
+      "Bash(git push *)",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "Bash(node /Users/joeldg/Projects/SDDManager/packages/cli/dist/index.js check)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(node /Users/joeldg/Projects/SDDManager/packages/cli/dist/index.js sync)",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{for\\(const line of d.trim\\(\\).split\\('\\\\n'\\)\\){const m=JSON.parse\\(line\\);if\\(m.id===2\\)console.log\\('tools:',m.result.tools.map\\(t=>t.name\\).join\\(', '\\)\\);if\\(m.id===3\\)console.log\\('search result sample:',JSON.parse\\(m.result.content[0].text\\).results[0].filename\\)}}\\)\")",
+      "Bash(git add *)",
+      "Bash(git -c user.name=joeldg -c user.email=joeldg@gmail.com commit -q -m 'Add closed-loop governance features: sync/CI gate, MCP server, AI draft-fix, and more *)"
     ]
   }
 }

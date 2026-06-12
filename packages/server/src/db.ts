@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS change_requests (
   reviewed_by TEXT,
   reviewed_at TEXT,
   resulting_version TEXT,
+  compatibility TEXT,
+  lint TEXT,
   created_at TEXT NOT NULL
 );
 
@@ -71,13 +73,81 @@ CREATE TABLE IF NOT EXISTS stub_prompts (
   project_type_id TEXT REFERENCES project_types(id),
   UNIQUE (target_filename, project_type_id)
 );
+
+CREATE TABLE IF NOT EXISTS spec_templates (
+  id TEXT PRIMARY KEY,
+  filename TEXT NOT NULL UNIQUE,
+  required_sections TEXT NOT NULL DEFAULT '[]',
+  content_template TEXT NOT NULL DEFAULT '',
+  description TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS usage_events (
+  id TEXT PRIMARY KEY,
+  event_type TEXT NOT NULL CHECK (event_type IN ('download', 'agent_read', 'search', 'stub_prompts', 'sync_check')),
+  project_type_id TEXT,
+  detail TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_usage_events_type_time ON usage_events(event_type, created_at);
+
+CREATE TABLE IF NOT EXISTS webhooks (
+  id TEXT PRIMARY KEY,
+  url TEXT NOT NULL,
+  events TEXT NOT NULL DEFAULT '[]',
+  format TEXT NOT NULL DEFAULT 'json' CHECK (format IN ('json', 'slack')),
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS repo_subscriptions (
+  id TEXT PRIMARY KEY,
+  project_type_id TEXT NOT NULL REFERENCES project_types(id),
+  repo TEXT NOT NULL,
+  branch TEXT NOT NULL DEFAULT 'main',
+  base_path TEXT NOT NULL DEFAULT 'specs',
+  created_at TEXT NOT NULL,
+  UNIQUE (project_type_id, repo)
+);
+
+CREATE TABLE IF NOT EXISTS sync_jobs (
+  id TEXT PRIMARY KEY,
+  subscription_id TEXT NOT NULL REFERENCES repo_subscriptions(id),
+  spec_id TEXT NOT NULL REFERENCES specs(id),
+  version TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'done', 'error')),
+  detail TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS spec_chunks USING fts5(
+  spec_id UNINDEXED,
+  section,
+  content
+);
 `;
+
+/** Columns added after the initial release; applied idempotently for existing databases. */
+const MIGRATIONS = [
+  "ALTER TABLE change_requests ADD COLUMN compatibility TEXT",
+  "ALTER TABLE change_requests ADD COLUMN lint TEXT",
+];
 
 export function createDb(path: string): Db {
   const db = new Database(path);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.exec(SCHEMA);
+  for (const migration of MIGRATIONS) {
+    try {
+      db.exec(migration);
+    } catch {
+      // column already exists (fresh schema or previously migrated)
+    }
+  }
   return db;
 }
 

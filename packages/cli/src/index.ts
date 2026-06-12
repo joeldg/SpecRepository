@@ -1,17 +1,20 @@
 #!/usr/bin/env node
 import { runInit } from "./init.js";
 import { runGenerate } from "./generate.js";
+import { runSync } from "./sync.js";
 
 const HELP = `specreg — SpecRegistry developer CLI
 
 Usage:
   specreg init      Pull approved specs for a project type into ./specs/
   specreg generate  Scan this codebase and fetch LLM prompts to generate missing specs
+  specreg check     Compare local specs to the registry; exit 1 on drift (CI gate)
+  specreg sync      Like check, but pulls the latest approved specs when drift is found
 
 Options:
   --server <url>    Registry server (default: $SPECREG_SERVER or http://localhost:4000)
   --type <name>     Project type name (skips the interactive prompt)
-  --dir <path>      init: output directory (default: specs)
+  --dir <path>      init/check/sync: spec directory (default: specs)
   --out <path>      generate: prompt output directory (default: .spec/prompts)
   -h, --help        Show this help
 `;
@@ -64,6 +67,12 @@ try {
       server,
       type: typeof flags.type === "string" ? flags.type : undefined,
       out: typeof flags.out === "string" ? flags.out : ".spec/prompts",
+    });
+  } else if (command === "check" || command === "sync") {
+    await runSync({
+      server,
+      dir: typeof flags.dir === "string" ? flags.dir : "specs",
+      mode: command,
     });
   } else {
     console.error(`Unknown command: ${command}\n`);

@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @specregistry/shared && npm run build -w @specregistry/server -w @specregistry/cli -w @specregistry/web",
+    "build": "npm run build -w @specregistry/shared && npm run build -w @specregistry/server -w @specregistry/cli -w @specregistry/mcp -w @specregistry/web",
     "test": "npm run test --workspaces --if-present",
     "dev:server": "npm run dev -w @specregistry/server",
     "dev:web": "npm run dev -w @specregistry/web",

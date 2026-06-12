@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { SpecSummary } from "@specregistry/shared";
+import type { SpecSummary, SpecTemplate } from "@specregistry/shared";
 import { api, getAuthor, type ProjectTypeWithCount } from "../api";
 import { StatusBadge, timeAgo } from "../components";
 
 export default function SpecsPage() {
   const [specs, setSpecs] = useState<SpecSummary[]>([]);
   const [types, setTypes] = useState<ProjectTypeWithCount[]>([]);
+  const [templates, setTemplates] = useState<SpecTemplate[]>([]);
   const [error, setError] = useState<string>();
   const [creating, setCreating] = useState(false);
   const [newTypeId, setNewTypeId] = useState("");
@@ -14,10 +15,11 @@ export default function SpecsPage() {
   const navigate = useNavigate();
 
   function reload() {
-    Promise.all([api.specs(), api.projectTypes()])
-      .then(([s, t]) => {
+    Promise.all([api.specs(), api.projectTypes(), api.templates()])
+      .then(([s, t, tpl]) => {
         setSpecs(s);
         setTypes(t);
+        setTemplates(tpl);
         if (!newTypeId && t.length) setNewTypeId(t[0].id);
       })
       .catch((e) => setError(e.message));
@@ -37,11 +39,15 @@ export default function SpecsPage() {
 
   async function createSpec() {
     if (!newFilename.trim()) return;
+    const filename = newFilename.trim();
+    const template = templates.find(
+      (t) => t.filename.toLowerCase() === filename.toLowerCase() && t.content_template.trim()
+    );
     try {
       const spec = await api.createSpec({
         project_type_id: newTypeId,
-        filename: newFilename.trim(),
-        content: `# ${newFilename.trim().replace(/\.md$/i, "")}\n\n_Draft._\n`,
+        filename,
+        content: template?.content_template ?? `# ${filename.replace(/\.md$/i, "")}\n\n_Draft._\n`,
         updated_by: getAuthor(),
       });
       navigate(`/specs/${spec.id}`);

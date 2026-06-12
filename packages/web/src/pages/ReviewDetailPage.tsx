@@ -4,6 +4,28 @@ import type { ChangeRequest, Spec } from "@specregistry/shared";
 import { api, getAuthor } from "../api";
 import { DiffView, StatusBadge, timeAgo } from "../components";
 
+interface CompatReport {
+  removed_sections: string[];
+  added_sections: string[];
+  suggested_delta: string;
+  requested_delta: string;
+  agrees_with_requested: boolean;
+}
+
+interface LintReport {
+  missing_sections: string[];
+  ok: boolean;
+}
+
+function parseJson<T>(value: unknown): T | null {
+  if (typeof value !== "string" || !value) return null;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return null;
+  }
+}
+
 export default function ReviewDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [review, setReview] = useState<ChangeRequest & { spec: Spec }>();
@@ -77,6 +99,53 @@ export default function ReviewDetailPage() {
           <p>{review.summary}</p>
         </div>
       )}
+
+      {(() => {
+        const compat = parseJson<CompatReport>((review as unknown as Record<string, unknown>).compatibility);
+        const lint = parseJson<LintReport>((review as unknown as Record<string, unknown>).lint);
+        if (!compat && !lint) return null;
+        return (
+          <div className="section">
+            <h2>Automated checks</h2>
+            <div className="cards">
+              {compat && (
+                <div className={`card${compat.agrees_with_requested ? "" : " alert"}`}>
+                  <div className="label">Compatibility</div>
+                  <div>
+                    Suggested bump: <span className="mono">{compat.suggested_delta}</span>
+                    {" · "}requested: <span className="mono">{compat.requested_delta}</span>{" "}
+                    {compat.agrees_with_requested ? (
+                      <span className="badge approved">ok</span>
+                    ) : (
+                      <span className="badge rejected">undersized</span>
+                    )}
+                  </div>
+                  {compat.removed_sections.length > 0 && (
+                    <div className="dim">Removes sections: {compat.removed_sections.join(", ")}</div>
+                  )}
+                  {compat.added_sections.length > 0 && (
+                    <div className="dim">Adds sections: {compat.added_sections.join(", ")}</div>
+                  )}
+                </div>
+              )}
+              {lint && (
+                <div className={`card${lint.ok ? "" : " alert"}`}>
+                  <div className="label">Template conformance</div>
+                  {lint.ok ? (
+                    <div>
+                      All required sections present <span className="badge approved">ok</span>
+                    </div>
+                  ) : (
+                    <div>
+                      Missing: {lint.missing_sections.join(", ")} <span className="badge rejected">lint</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {review.status === "pending" && (
         <div className="toolbar">

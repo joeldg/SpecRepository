@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api, type FeedbackRow } from "../api";
 import { StatusBadge, timeAgo } from "../components";
 
@@ -7,6 +7,8 @@ export default function FeedbackPage() {
   const [rows, setRows] = useState<FeedbackRow[]>([]);
   const [filter, setFilter] = useState("open");
   const [error, setError] = useState<string>();
+  const [drafting, setDrafting] = useState<string>();
+  const navigate = useNavigate();
 
   const reload = useCallback(() => {
     api
@@ -23,6 +25,19 @@ export default function FeedbackPage() {
       reload();
     } catch (e) {
       setError((e as Error).message);
+    }
+  }
+
+  async function draftFix(id: string) {
+    setError(undefined);
+    setDrafting(id);
+    try {
+      const cr = await api.draftFix(id);
+      navigate(`/reviews/${cr.id}`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setDrafting(undefined);
     }
   }
 
@@ -79,12 +94,19 @@ export default function FeedbackPage() {
                 </td>
                 <td className="faint">{timeAgo(f.created_at)}</td>
                 <td>
-                  {f.status === "open" && (
-                    <button onClick={() => setStatus(f.id, "acknowledged")}>Acknowledge</button>
-                  )}
-                  {f.status === "acknowledged" && (
-                    <button onClick={() => setStatus(f.id, "resolved")}>Resolve</button>
-                  )}
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {f.status !== "resolved" && (
+                      <button className="primary" disabled={drafting === f.id} onClick={() => draftFix(f.id)}>
+                        {drafting === f.id ? "Drafting…" : "Draft AI fix"}
+                      </button>
+                    )}
+                    {f.status === "open" && (
+                      <button onClick={() => setStatus(f.id, "acknowledged")}>Acknowledge</button>
+                    )}
+                    {f.status === "acknowledged" && (
+                      <button onClick={() => setStatus(f.id, "resolved")}>Resolve</button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
