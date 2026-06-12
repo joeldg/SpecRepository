@@ -1,0 +1,268 @@
+import type { Db } from "./db.js";
+import { now, uuid } from "./db.js";
+
+const DESIGN_STUB = `You are an expert software architect. Analyze the provided file structure and codebase context:
+[CONTEXT]
+
+Generate a comprehensive DESIGN.md file conforming to the standard template. The output must detail:
+1. System Architecture and component interactions.
+2. High-level design patterns implemented.
+3. Data flow patterns.
+
+The project is of type "[PROJECT_TYPE]" and primarily uses: [LANGUAGES].
+
+Output strict markdown. Do not include chat conversational text.`;
+
+const STRUCTURE_STUB = `You are an AI system specialized in codebase mapping. Analyze the following directory tree and file signatures:
+[TREE]
+
+Generate a STRUCTURE.md file that maps out:
+1. Core directory purposes.
+2. Entry points and configuration files.
+3. Dependency mapping between modules.
+
+The project is of type "[PROJECT_TYPE]" and primarily uses: [LANGUAGES].
+
+Output strict markdown. Avoid fluff.`;
+
+interface SeedSpec {
+  filename: string;
+  content: string;
+}
+
+function insertProjectType(
+  db: Db,
+  name: string,
+  scope: "global" | "project_type",
+  industry: string | null,
+  description: string | null
+): string {
+  const id = uuid();
+  const ts = now();
+  db.prepare(
+    `INSERT INTO project_types (id, name, scope, industry, description, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, name, scope, industry, description, ts, ts);
+  return id;
+}
+
+function insertPublishedSpec(db: Db, projectTypeId: string, spec: SeedSpec): void {
+  const id = uuid();
+  const ts = now();
+  db.prepare(
+    `INSERT INTO specs (id, project_type_id, filename, current_version, status, content, updated_by, created_at, updated_at)
+     VALUES (?, ?, ?, '1.0.0', 'published', ?, 'seed', ?, ?)`
+  ).run(id, projectTypeId, spec.filename, spec.content, ts, ts);
+  db.prepare(
+    `INSERT INTO spec_versions (id, spec_id, version, content, published_by, published_at)
+     VALUES (?, ?, '1.0.0', ?, 'seed', ?)`
+  ).run(uuid(), id, spec.content, ts);
+}
+
+/** Seeds the Thinkom demo configuration. No-op if any project type already exists. */
+export function seed(db: Db): boolean {
+  const existing = db.prepare("SELECT COUNT(*) AS n FROM project_types").get() as { n: number };
+  if (existing.n > 0) return false;
+
+  const globalId = insertProjectType(
+    db,
+    "Global",
+    "global",
+    null,
+    "Organization-wide specifications that apply to every project type."
+  );
+  insertPublishedSpec(db, globalId, {
+    filename: "GLOBAL_SECURITY.md",
+    content: `# Global Security Standards
+
+## Scope
+These rules apply to every project in the organization, regardless of project type.
+
+## Requirements
+1. **Secrets** must never be committed to source control. Use the approved secret manager.
+2. **Dependencies** must be pinned and scanned weekly for CVEs.
+3. **Network services** must default to TLS 1.2+ and deny-by-default firewall rules.
+4. **Authentication** flows must be reviewed by the security team before release.
+
+## AI Agent Directives
+AI agents generating code MUST refuse to embed credentials and MUST flag any spec
+contradiction via the feedback endpoint rather than guessing.
+`,
+  });
+  insertPublishedSpec(db, globalId, {
+    filename: "CODING_STANDARDS.md",
+    content: `# General Coding Standards
+
+## Principles
+- Prefer clarity over cleverness; code is read far more than it is written.
+- Every public interface requires documentation in the repository's spec files.
+- All changes ship with tests that exercise the changed behavior.
+
+## Versioning
+All specification documents follow strict Semantic Versioning (MAJOR.MINOR.PATCH).
+Breaking guidance changes are MAJOR; new guidance is MINOR; clarifications are PATCH.
+
+## Reviews
+No specification becomes active without an approved review in SpecRegistry.
+`,
+  });
+
+  const edgeId = insertProjectType(
+    db,
+    "Thinkom Edge Device",
+    "project_type",
+    "Aerospace/Telecommunications",
+    "Phased-array antenna edge devices: embedded controllers, RF front-end management."
+  );
+  insertPublishedSpec(db, edgeId, {
+    filename: "DESIGN.md",
+    content: `# Thinkom Edge Device — Design Specification
+
+## System Architecture
+Edge devices are composed of three planes:
+1. **Control plane** — supervisory MCU coordinating beam steering and health telemetry.
+2. **Data plane** — RF front-end with FPGA-based signal conditioning.
+3. **Management plane** — out-of-band service interface for fleet operations.
+
+## Design Patterns
+- State machines for mode transitions (ACQUIRE → TRACK → DEGRADED → SAFE).
+- Watchdog-supervised tasks; no dynamic allocation after initialization.
+
+## Data Flow
+Telemetry flows MCU → management plane at 1 Hz; alarms are event-driven.
+`,
+  });
+  insertPublishedSpec(db, edgeId, {
+    filename: "STRUCTURE.md",
+    content: `# Thinkom Edge Device — Repository Structure
+
+| Path | Purpose |
+| --- | --- |
+| \`fw/\` | Embedded firmware (C/C++), one subdirectory per board |
+| \`fpga/\` | HDL sources and constraint files |
+| \`tools/\` | Host-side flashing, provisioning, and test utilities |
+| \`docs/\` | Datasheets and interface control documents |
+
+## Entry Points
+- \`fw/<board>/main.c\` — firmware entry
+- \`tools/provision.py\` — manufacturing provisioning
+
+## Rules
+- HDL and firmware interfaces must be kept in lockstep via \`docs/icd/\`.
+`,
+  });
+  insertPublishedSpec(db, edgeId, {
+    filename: "API.md",
+    content: `# Thinkom Edge Device — Management API
+
+## Transport
+CoAP over DTLS on the management plane interface. JSON payloads, snake_case keys.
+
+## Resources
+- \`GET /telemetry\` — current beam state, temperatures, lock status
+- \`POST /mode\` — request mode transition; body: { "target": "TRACK" }
+- \`GET /health\` — watchdog counters and fault log tail
+
+## Constraints
+All commands must be idempotent; retries are expected on lossy links.
+`,
+  });
+
+  const fwId = insertProjectType(
+    db,
+    "Thinkom Firmware",
+    "project_type",
+    "Aerospace/Telecommunications",
+    "Shared firmware platform: RTOS components, drivers, and build infrastructure."
+  );
+  insertPublishedSpec(db, fwId, {
+    filename: "DESIGN.md",
+    content: `# Thinkom Firmware Platform — Design Specification
+
+## System Architecture
+A layered RTOS platform: board support packages at the bottom, a hardware
+abstraction layer, shared services (logging, OTA, crypto), and application tasks.
+
+## Design Patterns
+- HAL interfaces are pure C headers with one implementation per target.
+- Services communicate via message queues only; no shared mutable state.
+
+## Data Flow
+OTA images are signed and staged to the inactive bank; swap occurs on verified boot.
+`,
+  });
+  insertPublishedSpec(db, fwId, {
+    filename: "STRUCTURE.md",
+    content: `# Thinkom Firmware Platform — Repository Structure
+
+| Path | Purpose |
+| --- | --- |
+| \`bsp/\` | Board support packages |
+| \`hal/\` | Hardware abstraction interfaces and implementations |
+| \`services/\` | Logging, OTA, crypto, telemetry services |
+| \`apps/\` | Application task sets per product |
+
+## Build
+CMake presets per target; \`ctest\` runs the host-side unit suite.
+`,
+  });
+
+  const webId = insertProjectType(
+    db,
+    "Web App Standard",
+    "project_type",
+    "Software",
+    "Standard internal web application stack: TypeScript, React, REST APIs."
+  );
+  insertPublishedSpec(db, webId, {
+    filename: "DESIGN.md",
+    content: `# Web App Standard — Design Specification
+
+## System Architecture
+Single-page React frontend, REST backend, relational store. Server-rendered
+pages only where SEO requires it.
+
+## Design Patterns
+- API handlers are thin; domain logic lives in service modules.
+- Frontend state: server state via fetch hooks, UI state local to components.
+
+## Data Flow
+All mutations go through the API layer; the frontend never writes to storage directly.
+`,
+  });
+  insertPublishedSpec(db, webId, {
+    filename: "STRUCTURE.md",
+    content: `# Web App Standard — Repository Structure
+
+| Path | Purpose |
+| --- | --- |
+| \`src/api/\` | Route handlers and request validation |
+| \`src/services/\` | Domain logic |
+| \`src/web/\` | React application |
+| \`test/\` | Unit and integration tests |
+
+## Entry Points
+- \`src/index.ts\` — server entry
+- \`src/web/main.tsx\` — frontend entry
+`,
+  });
+
+  const insertStub = db.prepare(
+    `INSERT INTO stub_prompts (id, target_filename, template, description, project_type_id)
+     VALUES (?, ?, ?, ?, NULL)`
+  );
+  insertStub.run(
+    uuid(),
+    "DESIGN.md",
+    DESIGN_STUB,
+    "Generates a DESIGN.md from codebase context for existing projects."
+  );
+  insertStub.run(
+    uuid(),
+    "STRUCTURE.md",
+    STRUCTURE_STUB,
+    "Generates a STRUCTURE.md from a directory tree for existing projects."
+  );
+
+  return true;
+}

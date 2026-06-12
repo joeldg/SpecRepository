@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "specregistry",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["packages/server/dist/index.js"],
+      "port": 4000,
+      "autoPort": true
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm -v)",
+      "Bash(git --version)",
+      "Bash(git init *)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(npm test *)",
+      "Bash(SPECREG_DB=/tmp/specreg-smoke.db PORT=4000 node packages/server/dist/index.js)",
+      "Bash(curl -s http://localhost:4000/api/v1/health)",
+      "Bash(curl -s http://localhost:4000/api/v1/project-types)",
+      "Read(//private/tmp/specreg-demo/**)",
+      "Bash(node /Users/joeldg/Projects/SDDManager/packages/cli/dist/index.js generate --type \"Web App Standard\")",
+      "Bash(curl -s http://localhost:4000/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:4000/specs)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(kill 41886)"
+    ]
+  }
+}
