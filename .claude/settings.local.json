@@ -48,7 +48,8 @@
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\).results;console.log\\('hits:',r.length,'top:',r[0]?.filename,'§',r[0]?.section\\)}\\)\")",
       "Bash(curl -s \"http://localhost:4000/api/v1/ai/specs/Embedded%20Systems%20Platform\")",
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const s=JSON.parse\\(d\\).specs;console.log\\('specs served:',s.length,'\\('+s.map\\(x=>x.filename\\).join\\(', '\\)+'\\)'\\)}\\)\")",
-      "Bash(git -c user.name=joeldg -c user.email=joeldg@gmail.com commit -q -m 'Add AI-SDD sample spec pack with API loader *)"
+      "Bash(git -c user.name=joeldg -c user.email=joeldg@gmail.com commit -q -m 'Add AI-SDD sample spec pack with API loader *)",
+      "Bash(git -c user.name=joeldg -c user.email=joeldg@gmail.com commit -q -m 'Document the AI-SDD sample spec pack in the README *)"
     ]
   }
 }

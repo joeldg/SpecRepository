@@ -17,6 +17,7 @@ The full product specification lives in [docs/SPEC.md](docs/SPEC.md).
 | `packages/cli` | `specreg` developer CLI (`init`, `generate`, `check`, `sync`, `compile`, `verify`, `audit`) |
 | `packages/mcp` | `specreg-mcp` — MCP stdio server so AI agents read specs / search / file feedback natively |
 | `packages/shared` | Shared TypeScript domain types + semver/range helpers |
+| `samples/ai-sdd` | Loadable sample spec pack + API loader (`npm run sample:ai-sdd`) |
 
 ## Quick start
 
@@ -37,6 +38,23 @@ the defaults; the SQLite file defaults to `./specregistry.db`).
 ```sh
 npm test   # server API suite (vitest)
 ```
+
+## Sample data
+
+Beyond the built-in Acme demo seed, an **AI-SDD sample spec pack** populates a running
+registry with realistic content — 6 org-wide process specs (agent operating rules, git flow,
+code standards, documentation, observability, ticket workflow) plus an *Embedded Systems
+Platform* project type with 8 technical contract specs (system, API, SNMP, UDP, protobuf,
+config, DB schema, test strategy):
+
+```sh
+npm run sample:ai-sdd            # loads via the API into the server on :4000
+# or target/authenticate explicitly:
+SPECREG_SERVER=http://localhost:4000 SPECREG_TOKEN=sreg_... node samples/ai-sdd/load.mjs
+```
+
+The loader is idempotent (publishes each spec as 1.0.0, skips anything already present). See
+[samples/ai-sdd/README.md](samples/ai-sdd/README.md) for the full contents.
 
 ## CLI
 
