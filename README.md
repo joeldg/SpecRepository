@@ -56,6 +56,29 @@ content use it when generating `.mcp.json` and `SPECREGISTRY_MCP_SKILL.md`. If o
 the server falls back to forwarded request headers and then `http://localhost:4000`.
 Persisted SQLite data lives in the `specregistry-data` Docker volume by default.
 
+### Metrics and Grafana Alloy
+
+SpecRegistry exposes Prometheus text metrics at `GET /metrics`. The endpoint is public
+so Prometheus/Grafana Alloy can scrape it even when `SPECREG_AUTH=required`.
+
+Run the registry only:
+
+```sh
+docker compose up --build
+```
+
+Run with Grafana Alloy scraping `/metrics` and remote-writing upstream:
+
+```sh
+GRAFANA_REMOTE_WRITE_URL=https://prometheus-prod-xx.grafana.net/api/prom/push \
+GRAFANA_REMOTE_WRITE_USERNAME=<instance-id> \
+GRAFANA_REMOTE_WRITE_PASSWORD=<api-token> \
+docker compose --profile metrics up --build
+```
+
+The Alloy service reads [config/alloy/config.alloy](config/alloy/config.alloy), scrapes
+`specregistry:4000/metrics`, and forwards samples to the configured remote-write endpoint.
+
 ## Sample data
 
 Beyond the built-in Acme demo seed, an **AI-SDD sample spec pack** populates a running
@@ -137,6 +160,10 @@ feedback without raw HTTP.
 - **Search & analytics** — `GET /api/v1/ai/search?q=` serves section-level FTS5 hits
   to agents and the Search page; usage events (pulls, agent reads, searches, drift
   checks) roll up on the dashboard, including stale-but-published spec detection.
+- **Prometheus metrics** — `GET /metrics` exposes SDD and runtime governance metrics
+  including spec counts, review states, feedback, usage events, sync jobs, users,
+  approval policies, audit events, and efficacy runs. Docker Compose includes an
+  optional Grafana Alloy profile for remote write.
 - **Spec compiler** — `GET /api/v1/specs/:type/compile?target=claude|agents|cursor`
   renders the governed global + type spec set into the file agents actually load
   (`CLAUDE.md` / `AGENTS.md` / `.cursorrules`). `specreg sync` regenerates any target
@@ -192,6 +219,7 @@ GET/POST /api/v1/auth/users             GET/POST/DELETE /api/v1/auth/api-keys
 GET/PUT /api/v1/ldap/config             POST /api/v1/ldap/test · POST /api/v1/ldap/role-preview
 GET  /api/v1/audit-log
 POST /api/v1/integrations/github/webhook   POST /api/v1/integrations/slack/actions
+GET  /metrics
 ```
 
 ### Authentication & roles

@@ -18,5 +18,25 @@ services:
     volumes:
       - specregistry-data:/data
 
+  alloy:
+    image: grafana/alloy:latest
+    profiles:
+      - metrics
+    restart: unless-stopped
+    depends_on:
+      - specregistry
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --server.http.listen-addr=0.0.0.0:12345
+    ports:
+      - "${ALLOY_PORT:-12345}:12345"
+    environment:
+      GRAFANA_REMOTE_WRITE_URL: ${GRAFANA_REMOTE_WRITE_URL:-}
+      GRAFANA_REMOTE_WRITE_USERNAME: ${GRAFANA_REMOTE_WRITE_USERNAME:-}
+      GRAFANA_REMOTE_WRITE_PASSWORD: ${GRAFANA_REMOTE_WRITE_PASSWORD:-}
+    volumes:
+      - ./config/alloy/config.alloy:/etc/alloy/config.alloy:ro
+
 volumes:
   specregistry-data:

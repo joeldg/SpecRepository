@@ -263,6 +263,7 @@ const ROLE_RANK: Record<Role, number> = { agent: 0, author: 1, reviewer: 2, admi
 /** Paths reachable without a token even when auth is required. */
 const PUBLIC_PATHS = [
   "/api/v1/health",
+  "/metrics",
   "/api/v1/auth/login",
   "/api/v1/meta/public-key",
   "/api/v1/integrations/", // verified by their own HMAC secrets

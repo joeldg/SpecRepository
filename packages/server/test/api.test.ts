@@ -86,6 +86,19 @@ describe("project types & specs", () => {
   });
 });
 
+describe("observability", () => {
+  it("exposes Prometheus metrics for SDD operations", async () => {
+    const res = await app.inject({ method: "GET", url: "/metrics" });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toContain("text/plain");
+    expect(res.body).toContain("# HELP specregistry_specs_total");
+    expect(res.body).toContain('specregistry_specs_total{status="published",scope="global"}');
+    expect(res.body).toContain("# TYPE specregistry_usage_events_total counter");
+    expect(res.body).toContain('specregistry_users_total{role="admin",source="local"} 1');
+    expect(res.body).toContain("specregistry_oldest_pending_review_age_seconds");
+  });
+});
+
 describe("review workflow", () => {
   async function firstSpec(filename = "DESIGN.md", typeName = "Acme Edge Device") {
     const specs = await getJson("/api/v1/specs");

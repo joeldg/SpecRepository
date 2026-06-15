@@ -209,6 +209,10 @@ describe("auth & roles", () => {
       const anonymous = await secured.inject({ method: "GET", url: "/api/v1/specs" });
       expect(anonymous.statusCode).toBe(401);
 
+      const metrics = await secured.inject({ method: "GET", url: "/metrics" });
+      expect(metrics.statusCode).toBe(200);
+      expect(metrics.body).toContain("specregistry_info");
+
       const login = await secured.inject({
         method: "POST",
         url: "/api/v1/auth/login",

@@ -1,0 +1,18 @@
+prometheus.scrape "specregistry" {
+  targets = [
+    { "__address__" = "specregistry:4000" },
+  ]
+  metrics_path = "/metrics"
+  forward_to = [prometheus.remote_write.grafana.receiver]
+}
+
+prometheus.remote_write "grafana" {
+  endpoint {
+    url = env("GRAFANA_REMOTE_WRITE_URL")
+
+    basic_auth {
+      username = env("GRAFANA_REMOTE_WRITE_USERNAME")
+      password = env("GRAFANA_REMOTE_WRITE_PASSWORD")
+    }
+  }
+}

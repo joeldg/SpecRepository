@@ -9,6 +9,7 @@ import { stubPromptRoutes } from "./routes/stubPrompts.js";
 import { adminRoutes } from "./routes/admin.js";
 import { authRoutes } from "./routes/auth.js";
 import { integrationRoutes } from "./routes/integrations.js";
+import { metricsRoutes } from "./routes/metrics.js";
 import { registerAuth } from "./lib/auth.js";
 import { reindexAll } from "./lib/search.js";
 import { getPublicKey } from "./lib/sign.js";
@@ -33,6 +34,7 @@ export async function buildApp(db: Db, opts: AppOptions = {}): Promise<FastifyIn
 
   app.get("/api/v1/health", async () => ({ status: "ok" }));
   app.get("/api/v1/meta/public-key", async () => ({ algorithm: "ed25519", public_key: getPublicKey(db) }));
+  await app.register(metricsRoutes);
 
   await app.register(projectTypeRoutes, { prefix: "/api/v1" });
   await app.register(specRoutes, { prefix: "/api/v1" });

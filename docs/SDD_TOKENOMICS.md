@@ -315,6 +315,13 @@ Useful SDD metrics include:
 | Approval policy misses | Reviews blocked by missing required approvers |
 | Stale load-bearing specs | Old specs still frequently read or searched |
 
+SpecRegistry exposes operational Prometheus metrics at `GET /metrics`. These include
+registry counts such as `specregistry_specs_total`, `specregistry_reviews_total`,
+`specregistry_feedback_total`, `specregistry_usage_events_total`,
+`specregistry_audit_events_total`, and `specregistry_oldest_pending_review_age_seconds`.
+In Docker deployments, the optional Grafana Alloy profile can scrape these metrics and
+remote-write them to a Grafana Cloud or Prometheus-compatible endpoint.
+
 ## Review Guidance
 
 Spec reviewers should ask:
