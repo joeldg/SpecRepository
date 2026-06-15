@@ -6,7 +6,9 @@ Humans manage specs through a web dashboard with a review workflow; developers p
 approved specs with the `specreg` CLI; AI agents read specs and report ambiguities
 through a dedicated feedback endpoint.
 
-The full product specification lives in [docs/SPEC.md](docs/SPEC.md).
+The full product specification lives in [docs/SPEC.md](docs/SPEC.md). The operating model
+for Spec Driven Development, observability, and token economics lives in
+[docs/SDD_TOKENOMICS.md](docs/SDD_TOKENOMICS.md).
 
 ## Layout
 
