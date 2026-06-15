@@ -2,8 +2,9 @@ import type { FastifyInstance } from "fastify";
 import { bumpVersion, type ChangeRequest } from "@specregistry/shared";
 import { now, uuid } from "../db.js";
 import { HttpError, requireSpec, requireString } from "../helpers.js";
-import { approvalCount, policyReviewers, requiredApprovalCount } from "../lib/approvalPolicies.js";
+import { approvalCount, policyForSpec, policyReviewers, requiredApprovalCount } from "../lib/approvalPolicies.js";
 import { enforceRequiredReviewers } from "../lib/auth.js";
+import { actorFrom, recordAudit } from "../lib/auditLog.js";
 import { dispatchWebhooks } from "../lib/events.js";
 import { enqueueSyncJobs, processSyncJobs } from "../lib/github.js";
 import { reindexSpec } from "../lib/search.js";
@@ -35,7 +36,25 @@ export async function reviewRoutes(app: FastifyInstance): Promise<void> {
     const { id } = req.params as { id: string };
     const cr = requireChangeRequest(app, id);
     const spec = requireSpec(app.db, cr.spec_id);
-    return { ...cr, spec, approval_count: approvalCount(app.db, cr.id), required_approvals: requiredApprovalCount(app.db, spec) };
+    const approvals = app.db
+      .prepare("SELECT reviewer, created_at FROM review_approvals WHERE change_request_id = ? ORDER BY created_at")
+      .all(cr.id);
+    const policy = policyForSpec(app.db, spec);
+    return {
+      ...cr,
+      spec,
+      approvals,
+      approval_count: approvalCount(app.db, cr.id),
+      required_approvals: requiredApprovalCount(app.db, spec),
+      approval_policy: policy
+        ? {
+            id: policy.id,
+            filename_glob: policy.filename_glob,
+            min_approvals: policy.min_approvals,
+            required_reviewers: JSON.parse(policy.required_reviewers) as string[],
+          }
+        : null,
+    };
   });
 
   // Approve: bump semver per the requested delta, publish new content, record the version.
@@ -66,6 +85,14 @@ export async function reviewRoutes(app: FastifyInstance): Promise<void> {
     }
     const approvals = approvalCount(app.db, cr.id);
     const requiredApprovals = requiredApprovalCount(app.db, spec);
+    recordAudit(app.db, {
+      actor: actorFrom(req, reviewedBy),
+      action: "review.approval_recorded",
+      target_type: "change_request",
+      target_id: cr.id,
+      summary: `${reviewedBy} approved ${spec.filename} (${approvals}/${requiredApprovals})`,
+      detail: { filename: spec.filename, channel, approvals, required_approvals: requiredApprovals },
+    });
     if (approvals < requiredApprovals) {
       await dispatchWebhooks(
         app.db,
@@ -125,6 +152,14 @@ export async function reviewRoutes(app: FastifyInstance): Promise<void> {
       `${updated.filename} v${newVersion}${channel === "beta" ? " (beta)" : ""} approved by ${reviewedBy}`,
       { change_request_id: cr.id, spec_id: updated.id, filename: updated.filename, version: newVersion, channel }
     );
+    recordAudit(app.db, {
+      actor: actorFrom(req, reviewedBy),
+      action: "review.published",
+      target_type: "change_request",
+      target_id: cr.id,
+      summary: `${updated.filename} published as ${newVersion}`,
+      detail: { spec_id: updated.id, filename: updated.filename, version: newVersion, channel },
+    });
     return requireChangeRequest(app, cr.id);
   });
 
@@ -157,6 +192,14 @@ export async function reviewRoutes(app: FastifyInstance): Promise<void> {
       change_request_id: cr.id,
       spec_id: spec.id,
       filename: spec.filename,
+    });
+    recordAudit(app.db, {
+      actor: actorFrom(req, reviewedBy),
+      action: "review.rejected",
+      target_type: "change_request",
+      target_id: cr.id,
+      summary: `${spec.filename} change rejected by ${reviewedBy}`,
+      detail: { spec_id: spec.id, filename: spec.filename },
     });
     return requireChangeRequest(app, cr.id);
   });

@@ -35,6 +35,18 @@ export type ReviewRow = ChangeRequest & {
   project_type_id: string;
   project_type_name: string;
 };
+export type ReviewDetail = ChangeRequest & {
+  spec: Spec;
+  approvals: Array<{ reviewer: string; created_at: string }>;
+  approval_count: number;
+  required_approvals: number;
+  approval_policy: null | {
+    id: string;
+    filename_glob: string;
+    min_approvals: number;
+    required_reviewers: string[];
+  };
+};
 export type FeedbackRow = AgentFeedback & {
   filename: string;
   current_version: string;
@@ -118,6 +130,16 @@ export interface FeedbackCluster {
   latest_at: string;
   sample_description: string;
   feedback_ids: string[];
+}
+export interface AuditLogRow {
+  id: string;
+  actor: string;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  summary: string;
+  detail: string | null;
+  created_at: string;
 }
 
 const TOKEN_KEY = "specregistry.token";
@@ -207,7 +229,7 @@ export const api = {
 
   reviews: (status?: string) =>
     request<ReviewRow[]>(`/api/v1/reviews${status ? `?status=${status}` : ""}`),
-  review: (id: string) => request<ChangeRequest & { spec: Spec }>(`/api/v1/reviews/${id}`),
+  review: (id: string) => request<ReviewDetail>(`/api/v1/reviews/${id}`),
   approveReview: (id: string, reviewed_by: string, channel?: "stable" | "beta") =>
     request<ChangeRequest>(`/api/v1/reviews/${id}/approve`, {
       method: "POST",
@@ -255,6 +277,7 @@ export const api = {
     request<{ processed: number }>("/api/v1/sync-jobs/run", { method: "POST", body: JSON.stringify({}) }),
 
   analytics: () => request<AnalyticsSummary>("/api/v1/analytics/summary"),
+  auditLog: (limit = 100) => request<AuditLogRow[]>(`/api/v1/audit-log?limit=${limit}`),
 
   login: (username: string, password: string) =>
     request<{ token: string; user: { username: string; role: string } }>("/api/v1/auth/login", {

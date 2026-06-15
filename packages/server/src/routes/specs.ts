@@ -12,6 +12,7 @@ import {
 } from "../helpers.js";
 import { createChangeRequest } from "../lib/changes.js";
 import { mcpConfig, mcpSkillMarkdown } from "../lib/agentPack.js";
+import { actorFrom, recordAudit } from "../lib/auditLog.js";
 import { bundleSpecs, compileBundle, type CompileTarget } from "../lib/compile.js";
 import { dispatchWebhooks, recordUsage } from "../lib/events.js";
 import { enqueueSyncJobs } from "../lib/github.js";
@@ -167,6 +168,14 @@ export async function specRoutes(app: FastifyInstance): Promise<void> {
       filename: published.filename,
       version,
     });
+    recordAudit(app.db, {
+      actor: actorFrom(req, publishedBy),
+      action: "spec.published",
+      target_type: "spec",
+      target_id: published.id,
+      summary: `${published.filename} published as 1.0.0`,
+      detail: { filename: published.filename, version },
+    });
     return { ...published, lint };
   });
 
@@ -243,6 +252,14 @@ export async function specRoutes(app: FastifyInstance): Promise<void> {
       filename: updated.filename,
       version: stableVersion,
     });
+    recordAudit(app.db, {
+      actor: actorFrom(req, promotedBy),
+      action: "spec.promoted",
+      target_type: "spec",
+      target_id: updated.id,
+      summary: `${updated.filename} promoted to ${stableVersion}`,
+      detail: { from: version, version: stableVersion },
+    });
     return updated;
   });
 
@@ -267,6 +284,14 @@ export async function specRoutes(app: FastifyInstance): Promise<void> {
       `${spec.filename}: ${versionDelta} change proposed by ${proposedBy}`,
       { change_request_id: cr.id, spec_id: spec.id, filename: spec.filename }
     );
+    recordAudit(app.db, {
+      actor: actorFrom(req, proposedBy),
+      action: "review.submitted",
+      target_type: "change_request",
+      target_id: cr.id,
+      summary: `${spec.filename}: ${versionDelta} change proposed by ${proposedBy}`,
+      detail: { spec_id: spec.id, filename: spec.filename, version_delta: versionDelta },
+    });
     reply.code(201);
     return cr;
   });

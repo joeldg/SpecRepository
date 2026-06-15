@@ -2,7 +2,6 @@
 
 ## Governance
 
-- Multi-review approval UI refinements: show recorded approvers, remaining approval count, and policy match reason on review detail pages.
 - Review SLA dashboard for old pending reviews and stale reviewer queues.
 - Spec ownership with CODEOWNERS-style owners per project type and filename.
 - Dry-run publish preview showing affected repos, webhooks, generated agent files, and sync jobs.
@@ -37,7 +36,6 @@
 
 ## Enterprise
 
-- Immutable audit log for login, publish, reject, config change, and key issue/revoke events.
 - Secrets hygiene with encrypted-at-rest LDAP bind passwords and webhook secrets.
 - Read-only public share links for approved spec bundles.
 - SCIM or scheduled LDAP user/group sync.

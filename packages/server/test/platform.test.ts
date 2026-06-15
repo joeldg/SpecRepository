@@ -152,6 +152,10 @@ describe("approval policies", () => {
     expect(first.json().approval_count).toBe(1);
     expect(first.json().required_approvals).toBe(2);
 
+    const detail = await getJson(app, `/api/v1/reviews/${cr.id}`);
+    expect(detail.approvals).toEqual([{ reviewer: "reviewer-1", created_at: expect.any(String) }]);
+    expect(detail.approval_policy.filename_glob).toBe("API.md");
+
     const stillPending = await getJson(app, `/api/v1/specs/${spec.id}`);
     expect(stillPending.status).toBe("pending_review");
     expect(stillPending.current_version).toBe("1.0.0");
@@ -167,6 +171,11 @@ describe("approval policies", () => {
     const updated = await getJson(app, `/api/v1/specs/${spec.id}`);
     expect(updated.status).toBe("published");
     expect(updated.current_version).toBe("1.0.1");
+
+    const audit = await getJson(app, "/api/v1/audit-log");
+    expect(audit.some((row: any) => row.action === "approval_policy.created")).toBe(true);
+    expect(audit.some((row: any) => row.action === "review.approval_recorded")).toBe(true);
+    expect(audit.some((row: any) => row.action === "review.published")).toBe(true);
   });
 });
 

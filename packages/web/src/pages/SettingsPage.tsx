@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Webhook } from "@specregistry/shared";
 import {
   api,
+  type AuditLogRow,
   type ApiKeyRow,
   type ApprovalPolicyRow,
   type LdapConfig,
@@ -25,6 +26,7 @@ export default function SettingsPage() {
   const [ldap, setLdap] = useState<LdapConfig>();
   const [mcpGuide, setMcpGuide] = useState<McpGuide>();
   const [policies, setPolicies] = useState<ApprovalPolicyRow[]>([]);
+  const [auditRows, setAuditRows] = useState<AuditLogRow[]>([]);
   const [error, setError] = useState<string>();
   const [issuedToken, setIssuedToken] = useState<string>();
   const [ldapNotice, setLdapNotice] = useState<string>();
@@ -61,8 +63,9 @@ export default function SettingsPage() {
       api.apiKeys(),
       api.ldapConfig(),
       api.approvalPolicies(),
+      api.auditLog(50),
     ])
-      .then(([w, s, j, t, u, k, l, p]) => {
+      .then(([w, s, j, t, u, k, l, p, a]) => {
         setWebhooks(w);
         setSubs(s);
         setJobs(j);
@@ -71,6 +74,7 @@ export default function SettingsPage() {
         setKeys(k);
         setLdap(l);
         setPolicies(p);
+        setAuditRows(a);
         setSubTypeId((current) => current || t[0]?.id || "");
         setKeyUsername((current) => current || u[0]?.username || "");
         setMcpTypeName((current) => current || t.find((x) => x.scope !== "global")?.name || t[0]?.name || "");
@@ -483,6 +487,34 @@ export default function SettingsPage() {
                       Delete
                     </button>
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="section">
+        <h2>Audit log</h2>
+        {auditRows.length === 0 ? (
+          <div className="empty">No audit events yet.</div>
+        ) : (
+          <table className="grid">
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Actor</th>
+                <th>Action</th>
+                <th>Summary</th>
+              </tr>
+            </thead>
+            <tbody>
+              {auditRows.map((row) => (
+                <tr key={row.id}>
+                  <td className="faint">{timeAgo(row.created_at)}</td>
+                  <td className="mono">{row.actor}</td>
+                  <td className="mono">{row.action}</td>
+                  <td className="dim">{row.summary}</td>
                 </tr>
               ))}
             </tbody>

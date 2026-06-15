@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { ChangeRequest, Spec } from "@specregistry/shared";
-import { api, getAuthor } from "../api";
+import { api, getAuthor, type ReviewDetail } from "../api";
 import { DiffView, StatusBadge, timeAgo } from "../components";
 
 interface CompatReport {
@@ -28,7 +27,7 @@ function parseJson<T>(value: unknown): T | null {
 
 export default function ReviewDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [review, setReview] = useState<ChangeRequest & { spec: Spec }>();
+  const [review, setReview] = useState<ReviewDetail>();
   const [error, setError] = useState<string>();
   const [approvalChannel, setApprovalChannel] = useState<"stable" | "beta">("stable");
 
@@ -91,6 +90,39 @@ export default function ReviewDetailPage() {
         <div className="card">
           <div className="label">Reviewed</div>
           <div>{review.reviewed_by ? `${review.reviewed_by} · ${timeAgo(review.reviewed_at!)}` : "—"}</div>
+        </div>
+        <div className={`card${review.status === "pending" && review.approval_count < review.required_approvals ? " alert" : ""}`}>
+          <div className="label">Approvals</div>
+          <div className="mono">
+            {review.approval_count}/{review.required_approvals}
+          </div>
+        </div>
+      </div>
+
+      <div className="section">
+        <h2>Approval route</h2>
+        <div className="cards">
+          <div className="card">
+            <div className="label">Matched policy</div>
+            <div className="mono">{review.approval_policy?.filename_glob ?? "default"}</div>
+            {review.approval_policy?.required_reviewers.length ? (
+              <div className="dim">Required reviewers: {review.approval_policy.required_reviewers.join(", ")}</div>
+            ) : (
+              <div className="dim">Any reviewer may approve.</div>
+            )}
+          </div>
+          <div className="card">
+            <div className="label">Recorded approvers</div>
+            {review.approvals.length === 0 ? (
+              <div className="dim">No approvals recorded yet.</div>
+            ) : (
+              review.approvals.map((approval) => (
+                <div key={`${approval.reviewer}-${approval.created_at}`}>
+                  {approval.reviewer} <span className="faint">{timeAgo(approval.created_at)}</span>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
 

@@ -182,6 +182,18 @@ CREATE TABLE IF NOT EXISTS efficacy_runs (
   model TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS audit_log (
+  id TEXT PRIMARY KEY,
+  actor TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target_type TEXT,
+  target_id TEXT,
+  summary TEXT NOT NULL,
+  detail TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_audit_log_time ON audit_log(created_at);
 `;
 
 /** Versioned migrations for databases created before the current schema. Each runs once. */
@@ -231,6 +243,22 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+    `,
+  },
+  {
+    version: 8,
+    sql: `
+      CREATE TABLE IF NOT EXISTS audit_log (
+        id TEXT PRIMARY KEY,
+        actor TEXT NOT NULL,
+        action TEXT NOT NULL,
+        target_type TEXT,
+        target_id TEXT,
+        summary TEXT NOT NULL,
+        detail TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_audit_log_time ON audit_log(created_at);
     `,
   },
 ];

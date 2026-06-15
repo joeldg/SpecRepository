@@ -9,6 +9,7 @@ import {
   saveLdapConfig,
   type LdapConfig,
 } from "../lib/auth.js";
+import { actorFrom, recordAudit } from "../lib/auditLog.js";
 import { processSyncJobs } from "../lib/github.js";
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
@@ -20,7 +21,15 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   app.put("/ldap/config", async (req) => {
     const body = (req.body ?? {}) as Partial<LdapConfig> & { clear_bind_password?: boolean };
-    return publicLdapConfig(app.db, saveLdapConfig(app.db, body));
+    const saved = publicLdapConfig(app.db, saveLdapConfig(app.db, body));
+    recordAudit(app.db, {
+      actor: actorFrom(req, "settings"),
+      action: "ldap.config.updated",
+      target_type: "ldap",
+      summary: "LDAP configuration updated",
+      detail: { enabled: saved.enabled, url: saved.url, default_role: saved.default_role },
+    });
+    return saved;
   });
 
   app.post("/ldap/role-preview", async (req) => {
@@ -79,6 +88,14 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         ts
       );
     reply.code(201);
+    recordAudit(app.db, {
+      actor: actorFrom(req, "settings"),
+      action: "approval_policy.created",
+      target_type: "approval_policy",
+      target_id: id,
+      summary: `Approval policy created for ${(body.filename_glob as string) || "*"}`,
+      detail: { project_type_id: projectTypeId, min_approvals: Math.max(1, Number(body.min_approvals ?? 1)) },
+    });
     return app.db.prepare("SELECT * FROM approval_policies WHERE id = ?").get(id);
   });
 
@@ -86,6 +103,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     const { id } = req.params as { id: string };
     const result = app.db.prepare("DELETE FROM approval_policies WHERE id = ?").run(id);
     if (result.changes === 0) throw new HttpError(404, `Unknown approval policy: ${id}`);
+    recordAudit(app.db, {
+      actor: actorFrom(req, "settings"),
+      action: "approval_policy.deleted",
+      target_type: "approval_policy",
+      target_id: id,
+      summary: "Approval policy deleted",
+    });
     reply.code(204);
   });
 
@@ -120,6 +144,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         ts
       );
     reply.code(201);
+    recordAudit(app.db, {
+      actor: actorFrom(req, "settings"),
+      action: "template.created",
+      target_type: "template",
+      target_id: id,
+      summary: `Template created for ${filename}`,
+    });
     return app.db.prepare("SELECT * FROM spec_templates WHERE id = ?").get(id);
   });
 
@@ -143,6 +174,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         now(),
         id
       );
+    recordAudit(app.db, {
+      actor: actorFrom(req, "settings"),
+      action: "template.updated",
+      target_type: "template",
+      target_id: id,
+      summary: `Template updated for ${existing.filename as string}`,
+    });
     return app.db.prepare("SELECT * FROM spec_templates WHERE id = ?").get(id);
   });
 
@@ -150,6 +188,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     const { id } = req.params as { id: string };
     const result = app.db.prepare("DELETE FROM spec_templates WHERE id = ?").run(id);
     if (result.changes === 0) throw new HttpError(404, `Unknown template: ${id}`);
+    recordAudit(app.db, {
+      actor: actorFrom(req, "settings"),
+      action: "template.deleted",
+      target_type: "template",
+      target_id: id,
+      summary: "Template deleted",
+    });
     reply.code(204);
   });
 
@@ -169,6 +214,14 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       .prepare("INSERT INTO webhooks (id, url, events, format, active, created_at) VALUES (?, ?, ?, ?, 1, ?)")
       .run(id, url, JSON.stringify(events), format, now());
     reply.code(201);
+    recordAudit(app.db, {
+      actor: actorFrom(req, "settings"),
+      action: "webhook.created",
+      target_type: "webhook",
+      target_id: id,
+      summary: `Webhook created (${format})`,
+      detail: { events },
+    });
     return app.db.prepare("SELECT * FROM webhooks WHERE id = ?").get(id);
   });
 
@@ -176,6 +229,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     const { id } = req.params as { id: string };
     const result = app.db.prepare("DELETE FROM webhooks WHERE id = ?").run(id);
     if (result.changes === 0) throw new HttpError(404, `Unknown webhook: ${id}`);
+    recordAudit(app.db, {
+      actor: actorFrom(req, "settings"),
+      action: "webhook.deleted",
+      target_type: "webhook",
+      target_id: id,
+      summary: "Webhook deleted",
+    });
     reply.code(204);
   });
 
@@ -215,6 +275,14 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       throw new HttpError(409, `Subscription already exists for ${pt.name} → ${repo}`);
     }
     reply.code(201);
+    recordAudit(app.db, {
+      actor: actorFrom(req, "settings"),
+      action: "subscription.created",
+      target_type: "subscription",
+      target_id: id,
+      summary: `Repo subscription created for ${repo}`,
+      detail: { project_type: pt.name },
+    });
     return app.db.prepare("SELECT * FROM repo_subscriptions WHERE id = ?").get(id);
   });
 
@@ -223,6 +291,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     app.db.prepare("DELETE FROM sync_jobs WHERE subscription_id = ?").run(id);
     const result = app.db.prepare("DELETE FROM repo_subscriptions WHERE id = ?").run(id);
     if (result.changes === 0) throw new HttpError(404, `Unknown subscription: ${id}`);
+    recordAudit(app.db, {
+      actor: actorFrom(req, "settings"),
+      action: "subscription.deleted",
+      target_type: "subscription",
+      target_id: id,
+      summary: "Repo subscription deleted",
+    });
     reply.code(204);
   });
 
@@ -238,9 +313,24 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       .all();
   });
 
-  app.post("/sync-jobs/run", async () => {
+  app.post("/sync-jobs/run", async (req) => {
     const results = await processSyncJobs(app.db, process.env.GITHUB_TOKEN);
+    recordAudit(app.db, {
+      actor: actorFrom(req, "settings"),
+      action: "sync_jobs.run",
+      target_type: "sync_jobs",
+      summary: `Processed ${results.length} sync jobs`,
+    });
     return { processed: results.length, results };
+  });
+
+  // --- Audit log ---
+
+  app.get("/audit-log", async (req) => {
+    const { limit } = req.query as { limit?: string };
+    return app.db
+      .prepare("SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ?")
+      .all(Math.min(200, Math.max(1, Number(limit ?? 100))));
   });
 
   // --- Usage analytics ---

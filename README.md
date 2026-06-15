@@ -105,8 +105,9 @@ feedback without raw HTTP.
   (major/minor/patch) and records an immutable version snapshot.
 - **AI feedback loop** — agents read `GET /api/v1/ai/specs/:projectType` and report
   spec ambiguities/contradictions to `POST /api/v1/ai/feedback`, which appear as
-  alerts on the dashboard and on the affected spec until triaged. From any feedback
-  item, **Draft AI fix** sends the spec + complaint to Claude (`claude-opus-4-8`,
+  alerts on the dashboard and on the affected spec until triaged. Repeated complaints
+  are clustered by spec/type/text at `GET /api/v1/ai/feedback/clusters`. From any
+  feedback item, **Draft AI fix** sends the spec + complaint to Claude (`claude-opus-4-8`,
   requires `ANTHROPIC_API_KEY` on the server) and opens the revision as a normal
   pending change request — the review workflow stays the safety gate.
 - **Templates & conformance lint** — per-filename templates define required sections;
@@ -123,6 +124,9 @@ feedback without raw HTTP.
   renders the governed global + type spec set into the file agents actually load
   (`CLAUDE.md` / `AGENTS.md` / `.cursorrules`). `specreg sync` regenerates any target
   the repo has compiled, so the registry is the single source that produces agent context.
+- **Agent onboarding packs** — `GET /api/v1/specs/:type/agent-pack` returns a zip with
+  `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, `.mcp.json`, and `SPECREGISTRY_MCP_SKILL.md`.
+  `GET /api/v1/ai/mcp-guide/:type` exposes the MCP skill guide directly for agent setup.
 - **Reverse conformance audit** — `POST /api/v1/ai/audit` (and `specreg audit`) asks
   Claude whether a codebase snapshot *follows* its governed specs, reporting violations
   with spec/section/file citations. Checks adherence, not just spec currency.
@@ -131,7 +135,11 @@ feedback without raw HTTP.
   output ("earns its tokens" vs "no lift").
 - **Auth, roles & review routing** — local accounts (scrypt) or optional LDAP; roles
   (admin/reviewer/author/agent) gate approvals and settings; per-project-type required
-  reviewers (CODEOWNERS-style). Bearer tokens / `x-api-key` for agents and CI.
+  reviewers (CODEOWNERS-style). Approval policies can require multiple reviewers by
+  project type and filename glob. Bearer tokens / `x-api-key` for agents and CI.
+- **Audit log** — governance-sensitive actions (login, user/API-key changes, LDAP/settings
+  changes, review submission/approval/rejection/publish, templates, webhooks, subscriptions,
+  and sync-job runs) are recorded in `audit_log` and surfaced at `GET /api/v1/audit-log`.
 - **Channels & semver ranges** — approve to a `beta` channel without touching the stable
   head, then promote; manifests can carry caret pins (`^1.0.0`) and `sync-check` reports
   drift severity and whether the latest is within the pin.
@@ -153,15 +161,19 @@ POST /api/v1/specs/review               GET  /api/v1/reviews[?status=]
 POST /api/v1/reviews/:id/approve        POST /api/v1/reviews/:id/reject
 GET  /api/v1/ai/specs/:projectType      POST /api/v1/ai/feedback
 GET  /api/v1/ai/feedback[?status=]      POST /api/v1/ai/feedback/:id/status
-POST /api/v1/ai/feedback/:id/draft-fix  GET  /api/v1/ai/search?q=[&project_type=]
+GET  /api/v1/ai/feedback/clusters       POST /api/v1/ai/feedback/:id/draft-fix
+GET  /api/v1/ai/search?q=[&project_type=]  GET /api/v1/ai/mcp-guide/:type
 POST /api/v1/ai/audit                   POST /api/v1/ai/efficacy
 POST /api/v1/specs/:id/promote          GET  /api/v1/specs/:type/compile?target=
+GET  /api/v1/specs/:type/agent-pack     GET/POST/DELETE /api/v1/approval-policies
 GET  /api/v1/specs/:type/download[?channel=beta]   GET /api/v1/meta/public-key
 POST /api/v1/cli/stub-prompts           POST /api/v1/cli/sync-check
 GET/POST/PUT/DELETE /api/v1/templates   GET/POST/DELETE /api/v1/webhooks
 GET/POST/DELETE /api/v1/subscriptions   GET /api/v1/sync-jobs · POST /api/v1/sync-jobs/run
 GET  /api/v1/analytics/summary          POST /api/v1/auth/login · GET /api/v1/auth/me
-GET/POST /api/v1/auth/users             POST /api/v1/auth/api-keys
+GET/POST /api/v1/auth/users             GET/POST/DELETE /api/v1/auth/api-keys
+GET/PUT /api/v1/ldap/config             POST /api/v1/ldap/test · POST /api/v1/ldap/role-preview
+GET  /api/v1/audit-log
 POST /api/v1/integrations/github/webhook   POST /api/v1/integrations/slack/actions
 ```
 
@@ -171,7 +183,8 @@ Auth is **off by default** (anonymous access, free-text author names) for the ze
 dev experience. Set `SPECREG_AUTH=required` to require a Bearer token / `x-api-key` on every
 non-public route. A local `admin` account is seeded (password from `SPECREG_ADMIN_PASSWORD`,
 default `admin`). Roles: `admin` > `reviewer` > `author` > `agent`; approvals need `reviewer`,
-settings need `admin`. Per-project-type required reviewers restrict who can approve.
+settings need `admin`. Per-project-type required reviewers restrict who can approve; approval
+policies can also require N recorded approvals before a change publishes.
 
 Set `LDAP_URL` to authenticate against a directory instead (direct-bind via
 `LDAP_BIND_DN_TEMPLATE`, or service-account search via `LDAP_SEARCH_BASE`/`LDAP_SEARCH_FILTER`);

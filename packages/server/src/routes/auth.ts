@@ -9,6 +9,7 @@ import {
   verifyPassword,
   type Role,
 } from "../lib/auth.js";
+import { actorFrom, recordAudit } from "../lib/auditLog.js";
 
 function publicUser(user: Record<string, unknown>) {
   const { password_hash: _ignored, ...rest } = user;
@@ -41,6 +42,14 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const token = issueToken(app.db, user.id, "login session");
+    recordAudit(app.db, {
+      actor: user.username,
+      action: "auth.login",
+      target_type: "user",
+      target_id: user.id,
+      summary: `${user.username} signed in`,
+      detail: { source: user.source, role: user.role },
+    });
     return { token, user: publicUser(user as unknown as Record<string, unknown>) };
   });
 
@@ -77,6 +86,14 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       display_name: typeof body.display_name === "string" ? body.display_name : undefined,
     });
     reply.code(201);
+    recordAudit(app.db, {
+      actor: actorFrom(req, "admin"),
+      action: "user.created",
+      target_type: "user",
+      target_id: user.id,
+      summary: `User created: ${user.username}`,
+      detail: { role: user.role, source: user.source },
+    });
     return publicUser(user as unknown as Record<string, unknown>);
   });
 
@@ -88,6 +105,14 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     if (!user) throw new HttpError(404, `Unknown user: ${username}`);
     const token = issueToken(app.db, user.id, (body.name as string) ?? "api key");
     reply.code(201);
+    recordAudit(app.db, {
+      actor: actorFrom(req, "admin"),
+      action: "api_key.created",
+      target_type: "user",
+      target_id: user.id,
+      summary: `API key issued for ${user.username}`,
+      detail: { name: (body.name as string) ?? "api key", role: user.role },
+    });
     return { token, username: user.username, role: user.role };
   });
 
@@ -95,6 +120,13 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const { id } = req.params as { id: string };
     const result = app.db.prepare("DELETE FROM tokens WHERE id = ?").run(id);
     if (result.changes === 0) throw new HttpError(404, `Unknown API key: ${id}`);
+    recordAudit(app.db, {
+      actor: actorFrom(req, "admin"),
+      action: "api_key.revoked",
+      target_type: "api_key",
+      target_id: id,
+      summary: "API key revoked",
+    });
     reply.code(204);
   });
 }

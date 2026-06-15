@@ -273,6 +273,7 @@ const POLICIES: Array<{ method: RegExp; path: RegExp; min: Role }> = [
   { method: /POST/, path: /^\/api\/v1\/reviews\/[^/]+\/(approve|reject)$/, min: "reviewer" },
   { method: /POST/, path: /^\/api\/v1\/specs\/[^/]+\/promote$/, min: "reviewer" },
   { method: /GET|POST|PUT|DELETE/, path: /^\/api\/v1\/ldap(\/|$)/, min: "admin" },
+  { method: /GET/, path: /^\/api\/v1\/audit-log$/, min: "admin" },
   { method: /POST|PUT|DELETE/, path: /^\/api\/v1\/(templates|webhooks|subscriptions|approval-policies)(\/|$)/, min: "admin" },
   { method: /POST/, path: /^\/api\/v1\/sync-jobs\/run$/, min: "admin" },
   { method: /GET|POST|PUT|DELETE/, path: /^\/api\/v1\/auth\/users(\/|$)/, min: "admin" },
