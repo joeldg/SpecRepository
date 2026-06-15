@@ -21,7 +21,21 @@ for Spec Driven Development, observability, and token economics lives in
 | `packages/shared` | Shared TypeScript domain types + semver/range helpers |
 | `samples/ai-sdd` | Loadable sample spec pack + API loader (`npm run sample:ai-sdd`) |
 
-## Quick start
+## Install and Run
+
+SpecRegistry can be run three ways:
+
+- **Local development** — server and Vite web UI in separate processes.
+- **Production-style Node** — built server serves both the API and built web UI.
+- **Docker Compose** — containerized app with persistent SQLite storage and optional Grafana Alloy.
+
+Prerequisites:
+
+- Node.js 20+
+- npm
+- Docker + Docker Compose, only for container deployments
+
+### Local development
 
 ```sh
 npm install
@@ -33,15 +47,38 @@ npm run dev:server
 npm run dev:web
 ```
 
+Open the dashboard at `http://localhost:5173`. API calls are proxied to
+`http://localhost:4000`.
+
+The development server seeds Acme demo data into `specregistry.db` the first time it
+starts. Delete that file if you want a fresh local registry.
+
+### Production-style Node
+
 Production-style: after `npm run build`, `node packages/server/dist/index.js` serves
 both the API and the built web UI on port 4000 (`PORT` / `SPECREG_DB` env vars override
 the defaults; the SQLite file defaults to `./specregistry.db`).
 
 ```sh
+npm install
+npm run build
+PORT=4000 SPECREG_DB=/var/lib/specregistry/specregistry.db node packages/server/dist/index.js
+```
+
+For a server install, set `SPECREG_PUBLIC_URL` to the externally reachable URL. Generated
+agent packs, MCP guides, and `.mcp.json` examples use that value.
+
+```sh
+SPECREG_PUBLIC_URL=https://specs.example.com node packages/server/dist/index.js
+```
+
+### Validate the Build
+
+```sh
 npm test   # server API suite (vitest)
 ```
 
-## Docker
+## Docker Install
 
 For a containerized registry:
 
@@ -55,6 +92,35 @@ docker compose up --build
 content use it when generating `.mcp.json` and `SPECREGISTRY_MCP_SKILL.md`. If omitted,
 the server falls back to forwarded request headers and then `http://localhost:4000`.
 Persisted SQLite data lives in the `specregistry-data` Docker volume by default.
+
+Example `.env` for an internal server:
+
+```dotenv
+PORT=4000
+SPECREG_PUBLIC_URL=https://specs.example.com
+SPECREG_AUTH=required
+SPECREG_ADMIN_PASSWORD=change-this
+SPECREG_DB=/data/specregistry.db
+```
+
+Run it:
+
+```sh
+docker compose up --build -d
+docker compose logs -f specregistry
+```
+
+Stop it:
+
+```sh
+docker compose down
+```
+
+Reset local container data:
+
+```sh
+docker compose down -v
+```
 
 ### Metrics and Grafana Alloy
 
@@ -79,7 +145,215 @@ docker compose --profile metrics up --build
 The Alloy service reads [config/alloy/config.alloy](config/alloy/config.alloy), scrapes
 `specregistry:4000/metrics`, and forwards samples to the configured remote-write endpoint.
 
-## Sample data
+## First-Time Setup
+
+1. Start the server by using the local, Node, or Docker path above.
+2. Open the dashboard.
+3. If `SPECREG_AUTH=required`, sign in as `admin` with `SPECREG_ADMIN_PASSWORD`.
+4. Create or edit project types. Use one global project type for organization-wide specs.
+5. Add spec files such as `DESIGN.md`, `STRUCTURE.md`, `API.md`, or domain-specific docs.
+6. Publish initial drafts once they are ready to become governed contracts.
+7. Configure templates, approval policies, subscriptions, LDAP, and integrations as needed.
+8. Have each repository run `specreg init` to pull its approved specs and agent MCP config.
+
+## Usage Examples
+
+### Admin Dashboard
+
+Use the web dashboard to manage the registry:
+
+- Create project types and organization-wide global specs.
+- Edit drafts and publish initial versions.
+- Submit, review, approve, reject, and promote change requests.
+- Triage AI feedback clusters.
+- Configure templates, webhooks, repo subscriptions, approval policies, users, API keys, and LDAP.
+- Inspect usage analytics, audit log entries, efficacy runs, and SDD metrics.
+
+Typical local URLs:
+
+```text
+Development UI: http://localhost:5173
+API and production UI: http://localhost:4000
+Metrics: http://localhost:4000/metrics
+```
+
+### Developer CLI
+
+Build and link the CLI from this workspace:
+
+```sh
+npm install
+npm run build
+npm link -w @specregistry/cli -w @specregistry/mcp
+```
+
+Initialize a repository with the approved spec bundle for a project type:
+
+```sh
+cd /path/to/app
+specreg init --server http://localhost:4000 --type "Acme Edge Device"
+```
+
+That writes:
+
+- `specs/*.md` — governed global + project-type specs.
+- `specs/.specregistry.json` — versions, hashes, and bundle signature metadata.
+- `.mcp.json` — MCP server config for AI agents in that repository.
+
+Check for drift in CI:
+
+```sh
+specreg check --server https://specs.example.com
+```
+
+Synchronize when the registry has newer approved specs:
+
+```sh
+specreg sync --server https://specs.example.com
+```
+
+Compile governed specs into agent context files:
+
+```sh
+specreg compile --server https://specs.example.com --type "Web App Standard" --target claude
+specreg compile --server https://specs.example.com --type "Web App Standard" --target agents
+specreg compile --server https://specs.example.com --type "Web App Standard" --target cursor
+```
+
+Verify downloaded bundles offline against the registry public key:
+
+```sh
+specreg verify --server https://specs.example.com
+```
+
+Run an AI conformance audit:
+
+```sh
+specreg audit --server https://specs.example.com --type "Web App Standard" --ci
+```
+
+The current CLI and MCP clients are intended for trusted/internal registries or public
+read workflows. If `SPECREG_AUTH=required`, use the dashboard and direct API calls for
+admin/review operations; token-aware CLI/MCP transport is a natural next hardening step.
+
+### AI Agent and MCP Usage
+
+After `specreg init`, MCP-capable agents can use the generated `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "specregistry": {
+      "command": "specreg-mcp",
+      "args": [],
+      "env": {
+        "SPECREG_SERVER": "https://specs.example.com",
+        "SPECREG_PROJECT_TYPE": "Web App Standard"
+      }
+    }
+  }
+}
+```
+
+The MCP server exposes these tools:
+
+- `list_project_types` — discover registry project types.
+- `get_specs` — fetch governed global + project-type specs.
+- `search_specs` — retrieve matching spec sections without loading everything.
+- `report_spec_feedback` — file ambiguity, contradiction, or outdated-guidance feedback.
+
+Direct agent endpoints are also available:
+
+```sh
+curl http://localhost:4000/api/v1/ai/specs/Web%20App%20Standard
+curl "http://localhost:4000/api/v1/ai/search?q=authentication&project_type=Web%20App%20Standard"
+curl http://localhost:4000/api/v1/ai/mcp-guide/Web%20App%20Standard
+curl -o agent-pack.zip http://localhost:4000/api/v1/specs/Web%20App%20Standard/agent-pack
+```
+
+Agents should read specs before implementation, search when they need narrower guidance,
+and report feedback instead of guessing when a spec is ambiguous, contradictory, or stale.
+
+### API Usage
+
+List project types:
+
+```sh
+curl http://localhost:4000/api/v1/project-types
+```
+
+Create a draft spec:
+
+```sh
+curl -X POST http://localhost:4000/api/v1/specs \
+  -H "content-type: application/json" \
+  -d '{
+    "project_type_id": "PROJECT_TYPE_ID",
+    "filename": "API.md",
+    "content": "# API\n\nContract goes here.",
+    "updated_by": "alice"
+  }'
+```
+
+Submit a governed change request:
+
+```sh
+curl -X POST http://localhost:4000/api/v1/specs/review \
+  -H "content-type: application/json" \
+  -d '{
+    "spec_id": "SPEC_ID",
+    "proposed_content": "# API\n\nUpdated contract.",
+    "version_delta": "minor",
+    "proposed_by": "alice",
+    "summary": "Add integration contract"
+  }'
+```
+
+Approve a review:
+
+```sh
+curl -X POST http://localhost:4000/api/v1/reviews/CHANGE_REQUEST_ID/approve \
+  -H "content-type: application/json" \
+  -d '{"reviewed_by":"reviewer-1"}'
+```
+
+When auth is required, sign in and pass the token:
+
+```sh
+TOKEN=$(
+  curl -s -X POST http://localhost:4000/api/v1/auth/login \
+    -H "content-type: application/json" \
+    -d '{"username":"admin","password":"change-this"}' |
+    node -e "let s=''; process.stdin.on('data', d => s += d); process.stdin.on('end', () => console.log(JSON.parse(s).token));"
+)
+
+curl http://localhost:4000/api/v1/auth/me -H "authorization: Bearer $TOKEN"
+```
+
+### CI Usage
+
+Use `specreg check` as a drift gate:
+
+```yaml
+name: spec-drift
+on: [pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npm run build
+      - run: node packages/cli/dist/index.js check --server https://specs.example.com
+```
+
+Use `specreg audit --ci` when you want Claude-backed implementation conformance checks.
+That requires `ANTHROPIC_API_KEY` on the registry server.
+
+### Sample Data
 
 Beyond the built-in Acme demo seed, an **AI-SDD sample spec pack** populates a running
 registry with realistic content — 6 org-wide process specs (agent operating rules, git flow,
@@ -96,42 +370,65 @@ SPECREG_SERVER=http://localhost:4000 SPECREG_TOKEN=sreg_... node samples/ai-sdd/
 The loader is idempotent (publishes each spec as 1.0.0, skips anything already present). See
 [samples/ai-sdd/README.md](samples/ai-sdd/README.md) for the full contents.
 
-## CLI
+### Observability Usage
+
+Scrape Prometheus metrics:
 
 ```sh
-# New project: pick a project type interactively, pull approved specs into ./specs/
-# Also drops a .mcp.json so MCP-capable agents in the repo use the registry natively.
-node packages/cli/dist/index.js init
-
-# Existing project: scan the codebase, fetch tailored LLM prompts into .spec/prompts/
-node packages/cli/dist/index.js generate
-
-# Drift detection: compare local specs/.specregistry.json to the registry.
-node packages/cli/dist/index.js check   # exit 1 on drift — wire into CI
-node packages/cli/dist/index.js sync    # re-pull approved specs when drifted
-
-# Compile the governed spec set into an agent context file.
-node packages/cli/dist/index.js compile --target claude   # or agents | cursor
-
-# Verify local spec hashes + the registry's ed25519 bundle signature.
-node packages/cli/dist/index.js verify
-
-# Ask Claude whether this codebase violates its governed specs (needs server ANTHROPIC_API_KEY).
-node packages/cli/dist/index.js audit --ci   # exit 1 when findings exist
-
-# Flags: --server <url> (or $SPECREG_SERVER), --type <name> to skip the prompt,
-#        --dir (spec directory), --out (generate output), --target, --force, --ci
+curl http://localhost:4000/metrics
 ```
 
-`npm link -w @specregistry/cli -w @specregistry/mcp` installs `specreg` and `specreg-mcp` onto your PATH.
+Useful metrics include:
 
-## MCP server
+- `specregistry_specs_total`
+- `specregistry_reviews_total`
+- `specregistry_oldest_pending_review_age_seconds`
+- `specregistry_feedback_total`
+- `specregistry_usage_events_total`
+- `specregistry_audit_events_total`
+- `specregistry_efficacy_runs_total`
 
-`specreg-mcp` is a stdio MCP server exposing `list_project_types`, `get_specs`,
-`search_specs`, and `report_spec_feedback`. `specreg init` writes a ready-to-use
-`.mcp.json` (configured via `SPECREG_SERVER` / `SPECREG_PROJECT_TYPE` env vars), so
-Claude Code and other MCP clients in that repo consult governed specs and file
-feedback without raw HTTP.
+Run Grafana Alloy through Compose:
+
+```sh
+docker compose --profile metrics up --build
+```
+
+### Integration Usage
+
+Use webhooks and chat integrations to push SDD events into the places teams already work:
+
+- JSON webhooks for publish, review, and feedback events.
+- Slack-formatted webhooks for review visibility.
+- Slack interactive approve/reject actions with `SLACK_SIGNING_SECRET`.
+- Google Chat-formatted webhook payloads.
+- GitHub repo subscriptions that open pull requests when approved specs change.
+- HMAC-verified inbound GitHub push webhooks that convert repo-side spec edits into reviews.
+
+### Authentication, Roles, and LDAP Usage
+
+Auth is off by default for a zero-config local experience. Enable it for shared servers:
+
+```dotenv
+SPECREG_AUTH=required
+SPECREG_ADMIN_PASSWORD=change-this
+```
+
+Roles are `admin`, `reviewer`, `author`, and `agent`. Admins manage settings, reviewers
+approve governed changes, authors create drafts and change requests, and agents can be
+given scoped API keys for automation.
+
+For LDAP, configure the Settings page or environment variables such as:
+
+```dotenv
+LDAP_URL=ldaps://ldap.example.com
+LDAP_BIND_DN_TEMPLATE=uid={{username}},ou=people,dc=example,dc=com
+LDAP_ADMIN_GROUP=SpecRegistry Admins
+LDAP_REVIEWER_GROUP=SpecRegistry Reviewers
+LDAP_DEFAULT_ROLE=author
+```
+
+Use the LDAP tester in Settings before switching users over.
 
 ## Concepts
 
