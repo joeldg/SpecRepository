@@ -235,6 +235,18 @@ or was not previously managed by the manifest, the CLI refuses to overwrite it u
 `--force` is passed. Repo-specific generated drafts should stay outside `specs/` until
 they are submitted through the registry review workflow.
 
+Generate repo-specific draft specs from local code into `.spec/drafts`, then submit them:
+
+```sh
+specreg generate --write --server https://specs.example.com --type "Acme Edge Device"
+specreg submit-drafts --server https://specs.example.com --type "Acme Edge Device" --author alice
+```
+
+`submit-drafts` creates new registry drafts for filenames that do not exist yet. For
+published specs with matching filenames, it opens normal change requests. Add `--publish`
+to immediately publish newly-created registry drafts as `1.0.0`; existing published specs
+still go through review.
+
 Check for drift in CI:
 
 ```sh

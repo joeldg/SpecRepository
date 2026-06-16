@@ -2,6 +2,7 @@
 import { loadCliEnv } from "./env.js";
 import { runInit } from "./init.js";
 import { runGenerate } from "./generate.js";
+import { runSubmitDrafts } from "./submitDrafts.js";
 import { runSync } from "./sync.js";
 import { runCompile, COMPILE_TARGETS, type CompileTarget } from "./compile.js";
 import { runVerify } from "./verify.js";
@@ -12,6 +13,7 @@ const HELP = `specreg — SpecRegistry developer CLI
 Usage:
   specreg init      Pull approved specs for a project type into ./specs/
   specreg generate  Scan this codebase and fetch LLM prompts to generate missing specs
+  specreg submit-drafts  Submit generated draft specs into the registry workflow
   specreg check     Compare local specs to the registry; exit 1 on drift (CI gate)
   specreg sync      Like check, but pulls the latest approved specs when drift is found
   specreg compile   Render the spec set into CLAUDE.md / AGENTS.md / .cursorrules
@@ -25,6 +27,9 @@ Options:
   --dir <path>      Spec directory (default: specs; generate --write default: .spec/drafts)
   --out <path>      generate: prompt output directory (default: .spec/prompts)
   --target <t>      compile: claude | agents | cursor (default: claude)
+  --author <name>   submit-drafts: author/proposer name (default: $USER or cli)
+  --delta <d>       submit-drafts: major | minor | patch (default: minor)
+  --publish         submit-drafts: publish newly-created registry drafts immediately
   --write           generate: use configured CLI LLM provider to write generated specs
   --force           Overwrite protected/generated files where supported
   --ci              audit: exit 1 when findings exist
@@ -87,6 +92,19 @@ try {
       out: typeof flags.out === "string" ? flags.out : ".spec/prompts",
       dir: typeof flags.dir === "string" ? flags.dir : ".spec/drafts",
       write: flags.write === true,
+      force: flags.force === true,
+    });
+  } else if (command === "submit-drafts") {
+    const delta = typeof flags.delta === "string" ? flags.delta : "minor";
+    if (!["major", "minor", "patch"].includes(delta)) throw new Error("--delta must be one of: major, minor, patch");
+    await runSubmitDrafts({
+      server,
+      token,
+      type: typeof flags.type === "string" ? flags.type : undefined,
+      dir: typeof flags.dir === "string" ? flags.dir : ".spec/drafts",
+      author: typeof flags.author === "string" ? flags.author : process.env.USER || "cli",
+      delta: delta as "major" | "minor" | "patch",
+      publish: flags.publish === true,
       force: flags.force === true,
     });
   } else if (command === "check" || command === "sync") {

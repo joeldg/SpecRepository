@@ -240,7 +240,9 @@ export async function runGenerate(opts: GenerateOptions): Promise<void> {
     for (const file of generated) {
       console.log(`  - ${path.relative(root, file)}`);
     }
-    console.log("\nReview the generated markdown, then create or submit the specs through the registry workflow.");
+    console.log(
+      `\nReview the generated markdown, then run:\n  specreg submit-drafts --server ${opts.server}${opts.type ? ` --type "${opts.type}"` : ""}`
+    );
   } else {
     console.log(
       `\nNext step: run each prompt through your AI agent to produce the corresponding spec file,\nor re-run with --write and SPECREG_GENERATE_PROVIDER / LLM_PROVIDER configured.`

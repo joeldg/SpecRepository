@@ -1,5 +1,5 @@
 import readline from "node:readline/promises";
-import type { ProjectType } from "@specregistry/shared";
+import type { ProjectType, SpecSummary } from "@specregistry/shared";
 
 export interface RegistryAuthOptions {
   token?: string;
@@ -75,4 +75,9 @@ export async function selectProjectType(server: string, typeName?: string, token
   } finally {
     rl.close();
   }
+}
+
+export async function specsForProjectType(server: string, projectTypeId: string, token?: string): Promise<SpecSummary[]> {
+  const all = await fetchJson<SpecSummary[]>(`${server}/api/v1/specs`, undefined, token);
+  return all.filter((spec) => spec.project_type_id === projectTypeId || spec.project_type_scope === "global");
 }
