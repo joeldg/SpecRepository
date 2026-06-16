@@ -36,12 +36,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   app.post("/llm/test", async (req) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const prompt = typeof body.prompt === "string" && body.prompt.trim() ? body.prompt.trim() : "Reply with: ok";
+    const maxTokens = Math.max(1, Math.min(100000, Number(body.max_tokens ?? 200) || 200));
     const result = await runLlmText(app.db, {
       system: "You are a connectivity test for SpecRegistry. Reply briefly.",
       user: prompt,
-      maxTokens: 200,
+      maxTokens,
     });
-    return { ok: true, provider: result.provider, model: result.model, text: result.text };
+    return { ok: true, provider: result.provider, model: result.model, text: result.text, max_tokens: maxTokens };
   });
 
   app.get("/llm/models", async () => {

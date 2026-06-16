@@ -335,14 +335,15 @@ describe("LLM settings", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const test = await app.inject({ method: "POST", url: "/api/v1/llm/test", payload: { prompt: "ping" } });
+    const test = await app.inject({ method: "POST", url: "/api/v1/llm/test", payload: { prompt: "ping", max_tokens: 321 } });
     expect(test.statusCode).toBe(200);
-    expect(test.json()).toMatchObject({ ok: true, provider: "openai_compatible", model: "local-model", text: "ok" });
+    expect(test.json()).toMatchObject({ ok: true, provider: "openai_compatible", model: "local-model", text: "ok", max_tokens: 321 });
     expect(fetchMock).toHaveBeenCalledWith(
       "http://llm.internal/v1/chat/completions",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({ authorization: "Bearer local-secret" }),
+        body: expect.stringContaining('"max_tokens":321'),
       })
     );
   });

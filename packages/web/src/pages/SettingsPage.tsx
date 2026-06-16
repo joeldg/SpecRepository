@@ -34,6 +34,8 @@ export default function SettingsPage() {
   const [ldapNotice, setLdapNotice] = useState<string>();
   const [llmNotice, setLlmNotice] = useState<string>();
   const [llmModels, setLlmModels] = useState<string[]>([]);
+  const [llmTestStatus, setLlmTestStatus] = useState<"idle" | "running" | "ok" | "error">("idle");
+  const [llmTestResult, setLlmTestResult] = useState<string>();
 
   const [hookUrl, setHookUrl] = useState("");
   const [hookFormat, setHookFormat] = useState("json");
@@ -395,15 +397,33 @@ export default function SettingsPage() {
                 <button
                   onClick={() =>
                     act(async () => {
-                      const saved = await saveCurrentLlm(llm);
-                      const result = await api.testLlm(llmTestPrompt);
-                      setLlmNotice(`LLM test ok: ${result.provider}/${result.model || saved.model} -> ${result.text.slice(0, 160)}`);
+                      setLlmTestStatus("running");
+                      setLlmTestResult(undefined);
+                      try {
+                        const saved = await saveCurrentLlm(llm);
+                        const result = await api.testLlm(llmTestPrompt, saved.max_tokens);
+                        setLlmTestStatus("ok");
+                        setLlmTestResult(
+                          `${result.provider}/${result.model || saved.model} · max ${result.max_tokens} token(s)\n${result.text}`
+                        );
+                        setLlmNotice("LLM test completed.");
+                      } catch (e) {
+                        setLlmTestStatus("error");
+                        setLlmTestResult((e as Error).message);
+                        throw e;
+                      }
                     }, false)
                   }
+                  disabled={llmTestStatus === "running"}
                 >
-                  Test LLM
+                  {llmTestStatus === "running" ? "Testing..." : "Test LLM"}
                 </button>
               </div>
+              {llmTestStatus !== "idle" && (
+                <pre className="mono" style={{ whiteSpace: "pre-wrap", maxHeight: 180, overflow: "auto", margin: "8px 0 0" }}>
+                  {llmTestStatus === "running" ? "Testing LLM connection..." : llmTestResult}
+                </pre>
+              )}
               <div className="faint">
                 Use OpenAI or Gemini for hosted providers. OpenAI-compatible mode supports local/network services such as Ollama, LM Studio, vLLM, LocalAI, or an internal LLM gateway.
               </div>

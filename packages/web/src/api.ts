@@ -340,10 +340,10 @@ export const api = {
   llmConfig: () => request<LlmConfig>("/api/v1/llm/config"),
   updateLlmConfig: (body: Partial<Omit<LlmConfig, "has_api_key">> & { api_key?: string; clear_api_key?: boolean }) =>
     request<LlmConfig>("/api/v1/llm/config", { method: "PUT", body: JSON.stringify(body) }),
-  testLlm: (prompt?: string) =>
-    request<{ ok: boolean; provider: string; model: string; text: string }>("/api/v1/llm/test", {
+  testLlm: (prompt?: string, max_tokens?: number) =>
+    request<{ ok: boolean; provider: string; model: string; text: string; max_tokens: number }>("/api/v1/llm/test", {
       method: "POST",
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ prompt, max_tokens }),
     }),
   llmModels: () => request<{ provider: string; models: string[] }>("/api/v1/llm/models"),
   mcpGuide: (projectType?: string) =>
