@@ -154,7 +154,8 @@ The Alloy service reads [config/alloy/config.alloy](config/alloy/config.alloy), 
 5. Add spec files such as `DESIGN.md`, `STRUCTURE.md`, `API.md`, or domain-specific docs.
 6. Publish initial drafts once they are ready to become governed contracts.
 7. Configure templates, approval policies, subscriptions, LDAP, and integrations as needed.
-8. Have each repository run `specreg init` to pull its approved specs and agent MCP config.
+8. Install or link the CLI as shown in [Developer CLI](#developer-cli), then have each
+   repository initialize its approved specs and agent MCP config.
 
 ## Usage Examples
 
@@ -179,7 +180,8 @@ Metrics: http://localhost:4000/metrics
 
 ### Developer CLI
 
-Build and link the CLI from this workspace:
+Build the workspace before using the CLI. During local development, link the CLI and MCP
+bins onto your PATH:
 
 ```sh
 npm install
@@ -187,11 +189,24 @@ npm run build
 npm link -w @specregistry/cli -w @specregistry/mcp
 ```
 
-Initialize a repository with the approved spec bundle for a project type:
+If you do not want to link the bins, run the built CLI directly from this checkout:
+
+```sh
+node packages/cli/dist/index.js --help
+```
+
+Initialize a repository with the approved spec bundle for a project type after the CLI is
+built and either linked or called through `node packages/cli/dist/index.js`:
 
 ```sh
 cd /path/to/app
 specreg init --server http://localhost:4000 --type "Acme Edge Device"
+```
+
+Equivalent unlinked form:
+
+```sh
+node /path/to/SDDManager/packages/cli/dist/index.js init --server http://localhost:4000 --type "Acme Edge Device"
 ```
 
 For an auth-required registry, pass a login/API token with `--token` or `SPECREG_TOKEN`:
