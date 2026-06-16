@@ -97,14 +97,27 @@ export default function SettingsPage() {
     api.mcpGuide(mcpTypeName).then(setMcpGuide).catch((e) => setError(e.message));
   }, [mcpTypeName]);
 
-  async function act(fn: () => Promise<unknown>) {
+  async function act(fn: () => Promise<unknown>, reloadAfter = true) {
     setError(undefined);
     try {
       await fn();
-      reload();
+      if (reloadAfter) reload();
     } catch (e) {
       setError((e as Error).message);
     }
+  }
+
+  async function saveCurrentLlm(config: LlmConfig): Promise<LlmConfig> {
+    const saved = await api.updateLlmConfig({
+      provider: config.provider,
+      model: config.model,
+      base_url: config.base_url,
+      max_tokens: config.max_tokens,
+      api_key: llmApiKey || undefined,
+    });
+    setLlm(saved);
+    setLlmApiKey("");
+    return saved;
   }
 
   return (
@@ -276,15 +289,23 @@ export default function SettingsPage() {
                           : "llama3.1"
                   }
                   value={llm.model}
-                  list="llm-model-options"
-                  style={{ minWidth: 220 }}
+                  style={{ minWidth: 220, display: llmModels.length ? "none" : undefined }}
                   onChange={(e) => setLlm({ ...llm, model: e.target.value })}
                 />
-                <datalist id="llm-model-options">
-                  {llmModels.map((model) => (
-                    <option key={model} value={model} />
-                  ))}
-                </datalist>
+                {llmModels.length > 0 && (
+                  <select
+                    value={llm.model}
+                    style={{ minWidth: 220 }}
+                    onChange={(e) => setLlm({ ...llm, model: e.target.value })}
+                  >
+                    {!llmModels.includes(llm.model) && <option value={llm.model}>{llm.model}</option>}
+                    {llmModels.map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 <input
                   type="number"
                   min={1}
@@ -295,14 +316,18 @@ export default function SettingsPage() {
                 <button
                   onClick={() =>
                     act(async () => {
+                      const saved = await saveCurrentLlm(llm);
                       const result = await api.llmModels();
                       setLlmModels(result.models);
+                      if (result.models.length > 0 && !result.models.includes(saved.model)) {
+                        setLlm({ ...saved, model: result.models[0] });
+                      }
                       setLlmNotice(
                         result.models.length
-                          ? `Loaded ${result.models.length} model(s) from ${result.provider}.`
+                          ? `Loaded ${result.models.length} model(s) from ${result.provider}. Select one, then save or test.`
                           : `No models returned by ${result.provider}.`
                       );
-                    })
+                    }, false)
                   }
                 >
                   Load models
@@ -311,17 +336,10 @@ export default function SettingsPage() {
                   className="primary"
                   onClick={() =>
                     act(async () => {
-                      const saved = await api.updateLlmConfig({
-                        provider: llm.provider,
-                        model: llm.model,
-                        base_url: llm.base_url,
-                        max_tokens: llm.max_tokens,
-                        api_key: llmApiKey || undefined,
-                      });
-                      setLlm(saved);
-                      setLlmApiKey("");
+                      const saved = await saveCurrentLlm(llm);
+                      setLlmModels((models) => (models.includes(saved.model) ? models : []));
                       setLlmNotice("LLM settings saved.");
-                    })
+                    }, false)
                   }
                 >
                   Save LLM
@@ -377,9 +395,10 @@ export default function SettingsPage() {
                 <button
                   onClick={() =>
                     act(async () => {
+                      const saved = await saveCurrentLlm(llm);
                       const result = await api.testLlm(llmTestPrompt);
-                      setLlmNotice(`LLM test ok: ${result.provider}/${result.model} -> ${result.text.slice(0, 160)}`);
-                    })
+                      setLlmNotice(`LLM test ok: ${result.provider}/${result.model || saved.model} -> ${result.text.slice(0, 160)}`);
+                    }, false)
                   }
                 >
                   Test LLM
