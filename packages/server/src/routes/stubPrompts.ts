@@ -1,14 +1,21 @@
 import type { FastifyInstance } from "fastify";
 import { driftSeverity, satisfiesCaret } from "@specregistry/shared";
 import type { Spec, StubPrompt, StubPromptResponse, SyncCheckResponse } from "@specregistry/shared";
-import { requireProjectType, requireString } from "../helpers.js";
+import { findProjectConsumer, requireProjectType, requireString } from "../helpers.js";
 import { recordUsage } from "../lib/events.js";
 import { now, uuid } from "../db.js";
+import { bundleSpecs } from "../lib/compile.js";
 
 export async function stubPromptRoutes(app: FastifyInstance): Promise<void> {
   app.post("/cli/manifest-report", async (req) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const pt = requireProjectType(app.db, requireString(body, "project_type"));
+    const project =
+      typeof body.project_id === "string"
+        ? findProjectConsumer(app.db, body.project_id, pt.id)
+        : typeof body.repo === "string"
+          ? findProjectConsumer(app.db, body.repo, pt.id)
+          : undefined;
     const repo = requireString(body, "repo");
     const specs = Array.isArray(body.specs)
       ? (body.specs as Array<{ filename?: unknown; version?: unknown; project_type?: unknown; sha256?: unknown }>).filter(
@@ -56,7 +63,7 @@ export async function stubPromptRoutes(app: FastifyInstance): Promise<void> {
       }
     })();
     recordUsage(app.db, "sync_check", pt.id, `manifest:${repo}`);
-    return { ok: true, repo, project_type: pt.name, specs: specs.length, last_seen_at: ts };
+    return { ok: true, project_id: id, repo, project_type: pt.name, specs: specs.length, last_seen_at: ts };
   });
 
   app.get("/cli/consumers", async () => {
@@ -70,7 +77,7 @@ export async function stubPromptRoutes(app: FastifyInstance): Promise<void> {
          LEFT JOIN repo_consumer_specs rcs ON rcs.consumer_id = rc.id
          LEFT JOIN specs s ON s.filename = rcs.filename
           AND s.status = 'published'
-          AND (s.project_type_id = rc.project_type_id OR s.project_type_id IN (SELECT id FROM project_types WHERE scope = 'global'))
+          AND (s.project_id = rc.id OR (s.project_id IS NULL AND (s.project_type_id = rc.project_type_id OR s.project_type_id IN (SELECT id FROM project_types WHERE scope = 'global'))))
          GROUP BY rc.id
          ORDER BY rc.last_seen_at DESC`
       )
@@ -82,6 +89,12 @@ export async function stubPromptRoutes(app: FastifyInstance): Promise<void> {
   app.post("/cli/sync-check", async (req): Promise<SyncCheckResponse> => {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const pt = requireProjectType(app.db, requireString(body, "project_type"));
+    const project =
+      typeof body.project_id === "string"
+        ? findProjectConsumer(app.db, body.project_id, pt.id)
+        : typeof body.repo === "string"
+          ? findProjectConsumer(app.db, body.repo, pt.id)
+          : undefined;
     const local = Array.isArray(body.specs)
       ? (body.specs as Array<{ filename: string; version: string; pin?: string }>).filter(
           (s) => typeof s?.filename === "string" && typeof s?.version === "string"
@@ -89,13 +102,7 @@ export async function stubPromptRoutes(app: FastifyInstance): Promise<void> {
       : [];
     recordUsage(app.db, "sync_check", pt.id);
 
-    const latest = app.db
-      .prepare(
-        `SELECT s.filename, s.current_version FROM specs s
-         JOIN project_types pt ON pt.id = s.project_type_id
-         WHERE s.status = 'published' AND (pt.id = ? OR pt.scope = 'global')`
-      )
-      .all(pt.id) as Array<Pick<Spec, "filename" | "current_version">>;
+    const latest = bundleSpecs(app.db, pt.id, "stable", project?.id);
     const latestByName = new Map(latest.map((s) => [s.filename, s.current_version]));
 
     const up_to_date: string[] = [];

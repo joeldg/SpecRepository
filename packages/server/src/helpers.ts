@@ -23,6 +23,36 @@ export function requireProjectType(db: Db, idOrName: string): ProjectType {
   return pt;
 }
 
+export interface ProjectConsumer {
+  id: string;
+  repo: string;
+  branch: string | null;
+  commit_sha: string | null;
+  project_type_id: string;
+  specs_path: string;
+  manifest_path: string;
+  source: string;
+  first_seen_at: string;
+  last_seen_at: string;
+}
+
+export function findProjectConsumer(db: Db, idOrRepo: string, projectTypeId?: string): ProjectConsumer | undefined {
+  if (projectTypeId) {
+    return db
+      .prepare("SELECT * FROM repo_consumers WHERE (id = ? OR repo = ?) AND project_type_id = ?")
+      .get(idOrRepo, idOrRepo, projectTypeId) as ProjectConsumer | undefined;
+  }
+  return db
+    .prepare("SELECT * FROM repo_consumers WHERE id = ? OR repo = ? ORDER BY last_seen_at DESC LIMIT 1")
+    .get(idOrRepo, idOrRepo) as ProjectConsumer | undefined;
+}
+
+export function requireProjectConsumer(db: Db, idOrRepo: string, projectTypeId?: string): ProjectConsumer {
+  const project = findProjectConsumer(db, idOrRepo, projectTypeId);
+  if (!project) throw new HttpError(404, `Unknown project: ${idOrRepo}`);
+  return project;
+}
+
 export function requireSpec(db: Db, id: string): Spec {
   const spec = db.prepare("SELECT * FROM specs WHERE id = ?").get(id) as Spec | undefined;
   if (!spec) throw new HttpError(404, `Unknown spec: ${id}`);

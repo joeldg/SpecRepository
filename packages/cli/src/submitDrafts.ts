@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { ChangeRequest, Spec } from "@specregistry/shared";
 import { fetchJson, selectProjectType, specsForProjectType } from "./registry.js";
+import { reportManifest } from "./repo.js";
 
 export interface SubmitDraftsOptions {
   server: string;
@@ -24,7 +25,14 @@ export async function runSubmitDrafts(opts: SubmitDraftsOptions): Promise<void> 
   if (files.length === 0) throw new Error(`No Markdown drafts found in ${path.relative(root, draftDir)}.`);
 
   const projectType = await selectProjectType(opts.server, opts.type, opts.token);
-  const governed = await specsForProjectType(opts.server, projectType.id, opts.token);
+  const project = await reportManifest(
+    opts.server,
+    opts.token,
+    { project_type: projectType.name, specs: [] },
+    "specs",
+    "submit-drafts"
+  );
+  const governed = await specsForProjectType(opts.server, projectType.id, opts.token, project.project_id);
   const byFilename = new Map(governed.map((spec) => [spec.filename, spec]));
 
   const created: string[] = [];
@@ -34,18 +42,23 @@ export async function runSubmitDrafts(opts: SubmitDraftsOptions): Promise<void> 
   for (const filename of files) {
     const content = fs.readFileSync(path.join(draftDir, filename), "utf8");
     const existing = byFilename.get(filename);
-    if (!existing) {
+    if (!existing || existing.effective_scope !== "project") {
       const spec = await fetchJson<Spec>(`${opts.server}/api/v1/specs`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           project_type_id: projectType.id,
+          project_id: project.project_id,
           filename,
           content,
           updated_by: opts.author,
         }),
       }, opts.token);
-      created.push(`${filename} -> draft ${spec.id}`);
+      created.push(
+        existing
+          ? `${filename} -> project draft ${spec.id} (overrides ${existing.effective_scope} spec ${existing.id})`
+          : `${filename} -> project draft ${spec.id}`
+      );
       if (opts.publish) {
         await fetchJson(`${opts.server}/api/v1/specs/${encodeURIComponent(spec.id)}/publish`, {
           method: "POST",

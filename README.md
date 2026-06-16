@@ -242,10 +242,12 @@ specreg generate --write --server https://specs.example.com --type "Acme Edge De
 specreg submit-drafts --server https://specs.example.com --type "Acme Edge Device" --author alice
 ```
 
-`submit-drafts` creates new registry drafts for filenames that do not exist yet. For
-published specs with matching filenames, it opens normal change requests. Add `--publish`
-to immediately publish newly-created registry drafts as `1.0.0`; existing published specs
-still go through review.
+`submit-drafts` reports the current repo to the registry and creates project-scoped drafts
+for that repo. If a generated filename already exists as a global or project-type spec, the
+new draft becomes a repo-specific override instead of changing the shared baseline. If the
+repo already has a published project-scoped spec with that filename, the CLI opens a normal
+change request. Add `--publish` to immediately publish newly-created project drafts as
+`1.0.0`; existing project-scoped published specs still go through review.
 
 Check for drift in CI:
 
@@ -259,9 +261,10 @@ Synchronize when the registry has newer approved specs:
 specreg sync --server https://specs.example.com
 ```
 
-`specreg init`, `specreg check`, and `specreg sync` report the local manifest back to the
-registry. The Settings page shows these repo consumers so admins can see which repositories
-are using which project type, manifest path, spec count, and outdated spec count.
+`specreg init`, `specreg check`, `specreg sync`, and `specreg submit-drafts` report the
+local manifest back to the registry. The Settings page shows these projects so admins can
+see which repositories are using which project type, manifest path, spec count, and outdated
+spec count.
 
 Compile governed specs into agent context files:
 
@@ -300,6 +303,7 @@ After `specreg init`, MCP-capable agents can use the generated `.mcp.json`:
       "env": {
         "SPECREG_SERVER": "https://specs.example.com",
         "SPECREG_PROJECT_TYPE": "Web App Standard",
+        "SPECREG_REPO": "github.com/acme/web-app",
         "SPECREG_TOKEN": "sreg_..."
       }
     }
@@ -313,15 +317,16 @@ present in the environment or passed with `--token`.
 The MCP server exposes these tools:
 
 - `list_project_types` — discover registry project types.
-- `get_specs` — fetch governed global + project-type specs.
-- `search_specs` — retrieve matching spec sections without loading everything.
+- `get_specs` — fetch governed global + project-type + project-scoped specs.
+- `search_specs` — retrieve matching spec sections, including project-scoped matches, without loading everything.
 - `report_spec_feedback` — file ambiguity, contradiction, or outdated-guidance feedback.
 
 Direct agent endpoints are also available:
 
 ```sh
 curl http://localhost:4000/api/v1/ai/specs/Web%20App%20Standard
-curl "http://localhost:4000/api/v1/ai/search?q=authentication&project_type=Web%20App%20Standard"
+curl "http://localhost:4000/api/v1/ai/specs/Web%20App%20Standard?repo=github.com/acme/web-app"
+curl "http://localhost:4000/api/v1/ai/search?q=authentication&project_type=Web%20App%20Standard&repo=github.com/acme/web-app"
 curl http://localhost:4000/api/v1/ai/mcp-guide/Web%20App%20Standard
 curl -o agent-pack.zip http://localhost:4000/api/v1/specs/Web%20App%20Standard/agent-pack
 ```
@@ -530,6 +535,10 @@ Use the LDAP tester in Settings before switching users over.
 - **Distribution** — `specreg check` gates CI on spec drift; repo subscriptions open
   GitHub PRs with updated specs on approval (configure a GitHub token in Settings or set `GITHUB_TOKEN`);
   webhooks (JSON or Slack format) fire on publish/review/feedback events.
+- **Project-scoped specs** — repo projects are first-class consumers attached to a
+  project type. Global specs define the shared baseline, project-type specs define the
+  domain baseline, and project specs override only that repo when local behavior needs
+  governed guidance without changing every consumer of the type.
 - **Search & analytics** — `GET /api/v1/ai/search?q=` serves section-level FTS5 hits
   to agents and the Search page; usage events (pulls, agent reads, searches, drift
   checks) roll up on the dashboard, including stale-but-published spec detection.
@@ -548,9 +557,10 @@ Use the LDAP tester in Settings before switching users over.
 - **Agent onboarding packs** — `GET /api/v1/specs/:type/agent-pack` returns a zip with
   `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, `.mcp.json`, and `SPECREGISTRY_MCP_SKILL.md`.
   `GET /api/v1/ai/mcp-guide/:type` exposes the MCP skill guide directly for agent setup.
-- **Repo consumers** — local manifests reported by `specreg init`, `specreg check`, and
-  `specreg sync` let the Settings page show which repositories are using which spec set
-  and how many reported specs are behind the latest approved versions.
+- **Projects** — local manifests reported by `specreg init`, `specreg check`, `specreg sync`,
+  and `specreg submit-drafts` let the Settings page show which repositories are using which
+  spec set, how many reported specs are behind the latest approved versions, and which
+  repo-specific specs exist as project overrides.
 - **Reverse conformance audit** — `POST /api/v1/ai/audit` (and `specreg audit`) asks
   the configured server LLM whether a codebase snapshot *follows* its governed specs,
   reporting violations with spec/section/file citations. Checks adherence, not just spec currency.
@@ -587,7 +597,7 @@ POST /api/v1/reviews/:id/approve        POST /api/v1/reviews/:id/reject
 GET  /api/v1/ai/specs/:projectType      POST /api/v1/ai/feedback
 GET  /api/v1/ai/feedback[?status=]      POST /api/v1/ai/feedback/:id/status
 GET  /api/v1/ai/feedback/clusters       POST /api/v1/ai/feedback/:id/draft-fix
-GET  /api/v1/ai/search?q=[&project_type=]  GET /api/v1/ai/mcp-guide/:type
+GET  /api/v1/ai/search?q=[&project_type=&repo=]  GET /api/v1/ai/mcp-guide/:type
 POST /api/v1/ai/audit                   POST /api/v1/ai/efficacy
 POST /api/v1/specs/:id/promote          GET  /api/v1/specs/:type/compile?target=
 GET  /api/v1/specs/:type/agent-pack     GET/POST/DELETE /api/v1/approval-policies

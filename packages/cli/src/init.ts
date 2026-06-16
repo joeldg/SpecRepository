@@ -3,7 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import AdmZip from "adm-zip";
 import { registryToken, selectProjectType, withRegistryAuth } from "./registry.js";
-import { reportManifest, type Manifest } from "./repo.js";
+import { repoIdentity, reportManifest, type Manifest } from "./repo.js";
 
 export interface InitOptions {
   server: string;
@@ -17,7 +17,8 @@ export async function runInit(opts: InitOptions): Promise<void> {
   const projectType = await selectProjectType(opts.server, opts.type, opts.token);
   console.log(`\nFetching latest approved specs for "${projectType.name}"...`);
 
-  const url = `${opts.server}/api/v1/specs/${encodeURIComponent(projectType.name)}/download`;
+  const identity = repoIdentity();
+  const url = `${opts.server}/api/v1/specs/${encodeURIComponent(projectType.name)}/download?repo=${encodeURIComponent(identity.repo)}`;
   const res = await fetch(url, withRegistryAuth(undefined, opts.token));
   if (!res.ok) {
     throw new Error(`Download failed: ${res.status} ${res.statusText}`);
@@ -47,11 +48,12 @@ export async function runInit(opts: InitOptions): Promise<void> {
   }
   console.log(`\nManifest saved as ${opts.dir}/.specregistry.json (records versions for future syncs).`);
 
-  writeMcpConfig(opts.server, projectType.name, registryToken(opts.token));
-  writeRegistryGuide(opts.server, projectType.name, opts.dir, registryToken(opts.token));
+  writeMcpConfig(opts.server, projectType.name, identity.repo, registryToken(opts.token));
+  writeRegistryGuide(opts.server, projectType.name, identity.repo, opts.dir, registryToken(opts.token));
   try {
-    await reportManifest(opts.server, opts.token, nextManifest, opts.dir, "init");
+    const reported = await reportManifest(opts.server, opts.token, nextManifest, opts.dir, "init");
     console.log("Reported local spec manifest to the registry.");
+    console.log(`Project scope: ${reported.project_id}`);
   } catch (err) {
     console.log(`Could not report manifest usage: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -89,7 +91,7 @@ function sha256(data: Buffer): string {
  * Drop a .mcp.json so MCP-capable agents (Claude Code etc.) in this repo can query
  * the registry and file feedback natively. Existing files are left untouched.
  */
-function writeMcpConfig(server: string, projectType: string, token?: string): void {
+function writeMcpConfig(server: string, projectType: string, repo: string, token?: string): void {
   const mcpPath = path.resolve(process.cwd(), ".mcp.json");
   if (fs.existsSync(mcpPath)) {
     console.log(".mcp.json already exists; not overwriting (add a 'specregistry' server manually if wanted).");
@@ -106,6 +108,7 @@ function writeMcpConfig(server: string, projectType: string, token?: string): vo
             env: {
               SPECREG_SERVER: server,
               SPECREG_PROJECT_TYPE: projectType,
+              SPECREG_REPO: repo,
               ...(token ? { SPECREG_TOKEN: token } : {}),
             },
           },
@@ -118,7 +121,7 @@ function writeMcpConfig(server: string, projectType: string, token?: string): vo
   console.log("Wrote .mcp.json — AI agents in this repo can now read specs and file feedback via MCP.");
 }
 
-function writeRegistryGuide(server: string, projectType: string, specDir: string, token?: string): void {
+function writeRegistryGuide(server: string, projectType: string, repo: string, specDir: string, token?: string): void {
   const guidePath = path.resolve(process.cwd(), "SPECREGISTRY.md");
   if (fs.existsSync(guidePath)) {
     console.log("SPECREGISTRY.md already exists; not overwriting.");
@@ -134,6 +137,7 @@ This repository is governed by SpecRegistry.
 
 - Registry: ${server}
 - Project type: ${projectType}
+- Project/repo: ${repo}
 - Governed specs directory: ${specDir}/
 - Manifest: ${specDir}/.specregistry.json
 
@@ -147,7 +151,7 @@ Use the \`specregistry\` MCP server from \`.mcp.json\`.
 ${token ? "Authentication is configured through `SPECREG_TOKEN` in `.mcp.json`.\n" : "If the registry requires auth, add `SPECREG_TOKEN` to `.mcp.json`.\n"}
 Required MCP flow:
 
-1. Call \`get_specs\` for project type \`${projectType}\`.
+1. Call \`get_specs\` for project type \`${projectType}\` and repo \`${repo}\`.
 2. Use \`search_specs\` for focused questions.
 3. Report ambiguity, contradiction, or outdated guidance with \`report_spec_feedback\`.
 4. Use \`specreg check\` to verify this repo is still using current approved spec versions.

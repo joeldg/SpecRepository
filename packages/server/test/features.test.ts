@@ -62,6 +62,64 @@ describe("sync-check (CLI drift detection)", () => {
     ]);
   });
 
+  it("allows project-scoped specs to override project-type specs for one repo", async () => {
+    const project = (
+      await app.inject({
+        method: "POST",
+        url: "/api/v1/cli/manifest-report",
+        payload: {
+          repo: "github.com/acme/device",
+          project_type: "Acme Edge Device",
+          specs: [],
+        },
+      })
+    ).json();
+    const types = await getJson("/api/v1/project-types");
+    const edge = types.find((t: any) => t.name === "Acme Edge Device");
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/specs",
+      payload: {
+        project_type_id: edge.id,
+        project_id: project.project_id,
+        filename: "API.md",
+        content: "# Project-only API\n\nProject-only endpoint guidance applies here.\n",
+        updated_by: "codex-test",
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    await app.inject({ method: "POST", url: `/api/v1/specs/${created.json().id}/publish`, payload: { published_by: "codex-test" } });
+
+    const download = await app.inject({
+      method: "GET",
+      url: "/api/v1/specs/Acme%20Edge%20Device/download?repo=github.com%2Facme%2Fdevice",
+    });
+    expect(download.statusCode).toBe(200);
+    const AdmZip = (await import("adm-zip")).default;
+    const zip = new AdmZip(Buffer.from(download.rawPayload));
+    expect(zip.readAsText("API.md")).toContain("Project-only API");
+    const manifest = JSON.parse(zip.readAsText(".specregistry.json"));
+    expect(manifest.project).toBe("github.com/acme/device");
+    expect(manifest.specs.find((s: any) => s.filename === "API.md")).toMatchObject({ scope: "project" });
+
+    const search = await getJson(
+      "/api/v1/ai/search?q=Project-only&project_type=Acme%20Edge%20Device&repo=github.com%2Facme%2Fdevice"
+    );
+    expect(search.project).toBe("github.com/acme/device");
+    expect(search.results[0]).toMatchObject({ filename: "API.md", effective_scope: "project" });
+
+    const drift = await app.inject({
+      method: "POST",
+      url: "/api/v1/cli/sync-check",
+      payload: {
+        repo: "github.com/acme/device",
+        project_type: "Acme Edge Device",
+        specs: [{ filename: "API.md", version: "1.0.0" }],
+      },
+    });
+    expect(drift.json().up_to_date).toContain("API.md");
+  });
+
   it("reports drift after a spec version bump", async () => {
     const clean = await app.inject({
       method: "POST",

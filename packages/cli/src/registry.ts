@@ -77,7 +77,8 @@ export async function selectProjectType(server: string, typeName?: string, token
   }
 }
 
-export async function specsForProjectType(server: string, projectTypeId: string, token?: string): Promise<SpecSummary[]> {
+export async function specsForProjectType(server: string, projectTypeId: string, token?: string, projectId?: string): Promise<SpecSummary[]> {
+  if (projectId) return await fetchJson<SpecSummary[]>(`${server}/api/v1/specs?project_id=${encodeURIComponent(projectId)}`, undefined, token);
   const all = await fetchJson<SpecSummary[]>(`${server}/api/v1/specs`, undefined, token);
   return all.filter((spec) => spec.project_type_id === projectTypeId || spec.project_type_scope === "global");
 }

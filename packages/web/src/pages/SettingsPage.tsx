@@ -891,9 +891,9 @@ export default function SettingsPage() {
       </div>
 
       <div className="section">
-        <h2>Repo consumers</h2>
+        <h2>Projects</h2>
         {consumers.length === 0 ? (
-          <div className="empty">No repositories have reported a local spec manifest yet.</div>
+          <div className="empty">No projects have reported a local spec manifest yet.</div>
         ) : (
           <table className="grid">
             <thead>

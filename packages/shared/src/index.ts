@@ -1,6 +1,6 @@
 /** Shared domain types for SpecRegistry (server, CLI, and web UI). */
 
-export type Scope = "global" | "project_type";
+export type Scope = "global" | "project_type" | "project";
 export type SpecStatus = "draft" | "pending_review" | "published";
 export type ReviewStatus = "pending" | "approved" | "rejected";
 export type VersionDelta = "major" | "minor" | "patch";
@@ -21,6 +21,7 @@ export interface Spec {
   id: string;
   /** Global specs belong to the seeded scope="global" project type */
   project_type_id: string;
+  project_id: string | null;
   filename: string;
   current_version: string;
   status: SpecStatus;
@@ -34,6 +35,8 @@ export interface Spec {
 export type SpecSummary = Omit<Spec, "content"> & {
   project_type_name: string;
   project_type_scope: Scope;
+  project_name: string | null;
+  effective_scope: Scope;
   open_feedback_count: number;
   pending_review_count: number;
 };

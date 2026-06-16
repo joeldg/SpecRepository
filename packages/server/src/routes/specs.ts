@@ -5,7 +5,9 @@ import { now, uuid } from "../db.js";
 import {
   HttpError,
   findProjectType,
+  findProjectConsumer,
   requireOneOf,
+  requireProjectConsumer,
   requireProjectType,
   requireSpec,
   requireString,
@@ -22,19 +24,28 @@ import { reindexSpec } from "../lib/search.js";
 import { sha256, signManifest } from "../lib/sign.js";
 
 const SUMMARY_SELECT = `
-  SELECT s.id, s.project_type_id, s.filename, s.current_version, s.status,
+  SELECT s.id, s.project_type_id, s.project_id, s.filename, s.current_version, s.status,
          s.updated_by, s.created_at, s.updated_at,
          pt.name AS project_type_name, pt.scope AS project_type_scope,
+         rc.repo AS project_name,
+         CASE WHEN s.project_id IS NOT NULL THEN 'project' ELSE pt.scope END AS effective_scope,
          (SELECT COUNT(*) FROM agent_feedback f WHERE f.spec_id = s.id AND f.status = 'open') AS open_feedback_count,
          (SELECT COUNT(*) FROM change_requests cr WHERE cr.spec_id = s.id AND cr.status = 'pending') AS pending_review_count
   FROM specs s
   JOIN project_types pt ON pt.id = s.project_type_id
+  LEFT JOIN repo_consumers rc ON rc.id = s.project_id
 `;
 
 export async function specRoutes(app: FastifyInstance): Promise<void> {
   // List all global and project-type specs (summaries, no markdown body).
   app.get("/specs", async (req) => {
-    const { project_type_id } = req.query as { project_type_id?: string };
+    const { project_type_id, project_id } = req.query as { project_type_id?: string; project_id?: string };
+    if (project_id) {
+      const project = requireProjectConsumer(app.db, project_id);
+      return app.db
+        .prepare(`${SUMMARY_SELECT} WHERE s.project_id = ? OR (s.project_id IS NULL AND (s.project_type_id = ? OR pt.scope = 'global')) ORDER BY CASE effective_scope WHEN 'global' THEN 0 WHEN 'project_type' THEN 1 ELSE 2 END, s.filename`)
+        .all(project.id, project.project_type_id);
+    }
     if (project_type_id) {
       return app.db
         .prepare(`${SUMMARY_SELECT} WHERE s.project_type_id = ? ORDER BY s.filename`)
@@ -49,9 +60,10 @@ export async function specRoutes(app: FastifyInstance): Promise<void> {
   // ?channel=beta overlays the newest beta versions; the manifest is ed25519-signed.
   app.get("/specs/:key/download", async (req, reply) => {
     const { key } = req.params as { key: string };
-    const { channel } = req.query as { channel?: string };
+    const { channel, project_id, repo } = req.query as { channel?: string; project_id?: string; repo?: string };
     const pt = requireProjectType(app.db, key);
-    const specs = bundleSpecs(app.db, pt.id, channel ?? "stable");
+    const project = project_id ? requireProjectConsumer(app.db, project_id, pt.id) : repo ? findProjectConsumer(app.db, repo, pt.id) : undefined;
+    const specs = bundleSpecs(app.db, pt.id, channel ?? "stable", project?.id);
     if (specs.length === 0) throw new HttpError(404, `No published specs for: ${pt.name}`);
 
     const zip = new AdmZip();
@@ -61,12 +73,14 @@ export async function specRoutes(app: FastifyInstance): Promise<void> {
     }
     const manifest = signManifest(app.db, {
       project_type: pt.name,
+      project: project?.repo ?? null,
       channel: channel ?? "stable",
       fetched_at: now(),
       specs: specs.map((s) => ({
         filename: s.filename,
         version: s.current_version,
-        project_type: s.project_type_id === pt.id ? pt.name : "Global",
+        project_type: s.project_id ? project?.repo ?? "Project" : s.project_type_id === pt.id ? pt.name : "Global",
+        scope: s.project_id ? "project" : s.project_type_id === pt.id ? "project_type" : "global",
         sha256: sha256(s.content),
       })),
     });
@@ -102,24 +116,26 @@ export async function specRoutes(app: FastifyInstance): Promise<void> {
   app.post("/specs", async (req, reply) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const projectTypeId = requireString(body, "project_type_id");
+    const projectId = typeof body.project_id === "string" && body.project_id ? body.project_id : null;
     const filename = requireString(body, "filename");
     const updatedBy = requireString(body, "updated_by");
     const content = typeof body.content === "string" ? body.content : "";
     const pt = findProjectType(app.db, projectTypeId);
     if (!pt) throw new HttpError(404, `Unknown project type: ${projectTypeId}`);
-    const duplicate = app.db
-      .prepare("SELECT id FROM specs WHERE project_type_id = ? AND filename = ?")
-      .get(pt.id, filename);
+    const project = projectId ? requireProjectConsumer(app.db, projectId, pt.id) : undefined;
+    const duplicate = project
+      ? app.db.prepare("SELECT id FROM specs WHERE project_id = ? AND filename = ?").get(project.id, filename)
+      : app.db.prepare("SELECT id FROM specs WHERE project_type_id = ? AND project_id IS NULL AND filename = ?").get(pt.id, filename);
     if (duplicate) throw new HttpError(409, `Spec ${filename} already exists for ${pt.name}`);
 
     const id = uuid();
     const ts = now();
     app.db
       .prepare(
-        `INSERT INTO specs (id, project_type_id, filename, current_version, status, content, updated_by, created_at, updated_at)
-         VALUES (?, ?, ?, '0.1.0', 'draft', ?, ?, ?, ?)`
+        `INSERT INTO specs (id, project_type_id, project_id, filename, current_version, status, content, updated_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, '0.1.0', 'draft', ?, ?, ?, ?)`
       )
-      .run(id, pt.id, filename, content, updatedBy, ts, ts);
+      .run(id, pt.id, project?.id ?? null, filename, content, updatedBy, ts, ts);
     reply.code(201);
     return requireSpec(app.db, id);
   });

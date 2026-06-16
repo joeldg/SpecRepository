@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS project_types (
   scope TEXT NOT NULL DEFAULT 'project_type' CHECK (scope IN ('global', 'project_type')),
   industry TEXT,
   description TEXT,
+  required_reviewers TEXT NOT NULL DEFAULT '[]',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -16,15 +17,17 @@ CREATE TABLE IF NOT EXISTS project_types (
 CREATE TABLE IF NOT EXISTS specs (
   id TEXT PRIMARY KEY,
   project_type_id TEXT NOT NULL REFERENCES project_types(id),
+  project_id TEXT REFERENCES repo_consumers(id),
   filename TEXT NOT NULL,
   current_version TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'pending_review', 'published')),
   content TEXT NOT NULL,
   updated_by TEXT NOT NULL,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  UNIQUE (project_type_id, filename)
+  updated_at TEXT NOT NULL
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_specs_type_filename ON specs(project_type_id, filename) WHERE project_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_specs_project_filename ON specs(project_id, filename) WHERE project_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS spec_versions (
   id TEXT PRIMARY KEY,
@@ -33,6 +36,7 @@ CREATE TABLE IF NOT EXISTS spec_versions (
   content TEXT NOT NULL,
   published_by TEXT NOT NULL,
   published_at TEXT NOT NULL,
+  channel TEXT NOT NULL DEFAULT 'stable',
   UNIQUE (spec_id, version)
 );
 
@@ -314,17 +318,48 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
       );
     `,
   },
+  {
+    version: 11,
+    sql: `
+      PRAGMA foreign_keys = OFF;
+      DROP TABLE IF EXISTS specs_new;
+      CREATE TABLE specs_new (
+        id TEXT PRIMARY KEY,
+        project_type_id TEXT NOT NULL REFERENCES project_types(id),
+        project_id TEXT REFERENCES repo_consumers(id),
+        filename TEXT NOT NULL,
+        current_version TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'pending_review', 'published')),
+        content TEXT NOT NULL,
+        updated_by TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO specs_new
+        (id, project_type_id, project_id, filename, current_version, status, content, updated_by, created_at, updated_at)
+        SELECT id, project_type_id, NULL, filename, current_version, status, content, updated_by, created_at, updated_at
+        FROM specs;
+      DROP TABLE specs;
+      ALTER TABLE specs_new RENAME TO specs;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_specs_type_filename ON specs(project_type_id, filename) WHERE project_id IS NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_specs_project_filename ON specs(project_id, filename) WHERE project_id IS NOT NULL;
+      PRAGMA foreign_keys = ON;
+    `,
+  },
 ];
 
 export function createDb(path: string): Db {
   const db = new Database(path);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
+  const hasSettings = Boolean(
+    db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'settings'").get()
+  );
   db.exec(SCHEMA);
   const row = db.prepare("SELECT value FROM settings WHERE key = 'schema_version'").get() as
     | { value: string }
     | undefined;
-  let version = row ? Number(row.value) : 0;
+  let version = row ? Number(row.value) : hasSettings ? 0 : MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;
   for (const migration of MIGRATIONS) {
     if (migration.version <= version) continue;
     try {

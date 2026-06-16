@@ -53,9 +53,9 @@ export async function reportManifest(
   manifest: Manifest,
   dir: string,
   source: string
-): Promise<void> {
+): Promise<{ project_id: string }> {
   const identity = repoIdentity();
-  await fetchJson(`${server}/api/v1/cli/manifest-report`, {
+  return await fetchJson<{ project_id: string }>(`${server}/api/v1/cli/manifest-report`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({

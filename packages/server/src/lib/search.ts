@@ -6,7 +6,10 @@ export interface SearchResult {
   spec_id: string;
   filename: string;
   project_type_id: string;
+  project_id: string | null;
   project_type_name: string;
+  project_name: string | null;
+  effective_scope: "global" | "project_type" | "project";
   current_version: string;
   section: string;
   section_anchor: string;
@@ -40,21 +43,34 @@ function toFtsQuery(query: string): string {
     .join(" ");
 }
 
-export function searchSpecs(db: Db, query: string, projectTypeId?: string, limit = 20): SearchResult[] {
+export function searchSpecs(db: Db, query: string, projectTypeId?: string, limit = 20, projectId?: string): SearchResult[] {
   const fts = toFtsQuery(query);
   if (!fts) return [];
-  const filter = projectTypeId ? "AND (pt.id = ? OR pt.scope = 'global')" : "";
+  let filter = "";
   const params: unknown[] = [fts];
-  if (projectTypeId) params.push(projectTypeId);
+  if (projectTypeId && projectId) {
+    filter = "AND (s.project_id = ? OR (s.project_id IS NULL AND (pt.id = ? OR pt.scope = 'global')))";
+    params.push(projectId, projectTypeId);
+  } else if (projectTypeId) {
+    filter = "AND s.project_id IS NULL AND (pt.id = ? OR pt.scope = 'global')";
+    params.push(projectTypeId);
+  }
   params.push(limit);
   const rows = db
     .prepare(
-      `SELECT c.spec_id, s.filename, s.project_type_id, pt.name AS project_type_name,
+      `SELECT c.spec_id, s.filename, s.project_type_id, s.project_id,
+              pt.name AS project_type_name, rc.repo AS project_name,
+              CASE
+                WHEN s.project_id IS NOT NULL THEN 'project'
+                WHEN pt.scope = 'global' THEN 'global'
+                ELSE 'project_type'
+              END AS effective_scope,
               s.current_version, c.section,
               snippet(spec_chunks, 2, '[', ']', '…', 32) AS excerpt
        FROM spec_chunks c
        JOIN specs s ON s.id = c.spec_id
        JOIN project_types pt ON pt.id = s.project_type_id
+       LEFT JOIN repo_consumers rc ON rc.id = s.project_id
        WHERE spec_chunks MATCH ? ${filter}
        ORDER BY rank
        LIMIT ?`

@@ -5,7 +5,7 @@ import { fetchJson } from "./registry.js";
 import { runInit } from "./init.js";
 import { runCompile, savedCompileTargets } from "./compile.js";
 import { runVerify } from "./verify.js";
-import { reportManifest, type Manifest } from "./repo.js";
+import { repoIdentity, reportManifest, type Manifest } from "./repo.js";
 
 export interface SyncOptions {
   server: string;
@@ -27,10 +27,11 @@ function readManifest(dir: string): Manifest {
 
 export async function runSync(opts: SyncOptions): Promise<void> {
   const manifest = readManifest(opts.dir);
+  const identity = repoIdentity();
   const result = await fetchJson<SyncCheckResponse>(`${opts.server}/api/v1/cli/sync-check`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ project_type: manifest.project_type, specs: manifest.specs }),
+    body: JSON.stringify({ project_type: manifest.project_type, specs: manifest.specs, repo: identity.repo }),
   }, opts.token);
   try {
     await reportManifest(opts.server, opts.token, manifest, opts.dir, opts.mode);

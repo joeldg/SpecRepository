@@ -52,7 +52,7 @@ Every governed repository should follow this workflow.
    For auth-required registries, pass `--token <token>` or set `SPECREG_TOKEN`; `specreg init` carries that token into the generated MCP configuration.
 
 2. **Load Agent Context**
-   Agents should use the SpecRegistry MCP server and call `get_specs` before code changes. If an agent cannot use MCP, provide the generated `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, or the full agent pack from `GET /api/v1/specs/:type/agent-pack`.
+   Agents should use the SpecRegistry MCP server and call `get_specs` before code changes. In a concrete repository, configure `SPECREG_REPO` so the agent receives the repo's project-scoped specs in addition to global and project-type specs. If an agent cannot use MCP, provide the generated `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, or the full agent pack from `GET /api/v1/specs/:type/agent-pack`.
    In server or Docker deployments, configure `SPECREG_PUBLIC_URL` so generated MCP config points to the reachable registry URL rather than the container's local bind address.
    If `SPECREG_AUTH=required`, MCP clients must set `SPECREG_TOKEN` so `get_specs`, `search_specs`, and `report_spec_feedback` can authenticate.
 
