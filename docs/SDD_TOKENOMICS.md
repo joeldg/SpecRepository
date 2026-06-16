@@ -65,7 +65,7 @@ Every governed repository should follow this workflow.
 
 5. **Audit**
    Use reverse conformance audit (`specreg audit` or `POST /api/v1/ai/audit`) to check whether the implementation follows the governed specs.
-   Server-side LLM features should use the configured provider for the deployment: Anthropic, an OpenAI-compatible gateway, or a local/network model endpoint.
+   Server-side LLM features should use the configured provider for the deployment: Anthropic, OpenAI, Gemini, an OpenAI-compatible gateway, or a local/network model endpoint.
 
 6. **Review Evidence**
    Reviewers should inspect diffs, lint, compatibility, contradiction reports, approval policy, recorded approvers, feedback clusters, audit findings, and audit log entries.
@@ -332,7 +332,7 @@ remote-write them to a Grafana Cloud or Prometheus-compatible endpoint.
 LLM provider settings are part of tokenomics. Local or network OpenAI-compatible endpoints
 can reduce spend and keep prompts inside an internal network; hosted providers may provide
 stronger reasoning for high-value audits and efficacy checks. The Settings page exposes the
-active provider, model, base URL, token budget, and connectivity test.
+active provider, model, base URL, token budget, model discovery, and connectivity test.
 
 ## Review Guidance
 

@@ -11,7 +11,7 @@ import {
 } from "../lib/auth.js";
 import { actorFrom, recordAudit } from "../lib/auditLog.js";
 import { processSyncJobs } from "../lib/github.js";
-import { publicLlmConfig, runLlmText, saveLlmConfig, type LlmConfig } from "../lib/llm.js";
+import { listLlmModels, publicLlmConfig, runLlmText, saveLlmConfig, type LlmConfig } from "../lib/llm.js";
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
   // --- LLM provider settings ---
@@ -42,6 +42,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       maxTokens: 200,
     });
     return { ok: true, provider: result.provider, model: result.model, text: result.text };
+  });
+
+  app.get("/llm/models", async () => {
+    return listLlmModels(app.db);
   });
 
   // --- LDAP settings ---

@@ -346,6 +346,61 @@ describe("LLM settings", () => {
       })
     );
   });
+
+  it("lists models from OpenAI-compatible, OpenAI, and Gemini providers", async () => {
+    const fetchMock = vi.fn();
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ data: [{ id: "local-a" }, { id: "local-b" }] }), {
+        headers: { "content-type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await app.inject({
+      method: "PUT",
+      url: "/api/v1/llm/config",
+      payload: { provider: "openai_compatible", base_url: "http://local-llm/v1", model: "local-a" },
+    });
+    const local = await app.inject({ method: "GET", url: "/api/v1/llm/models" });
+    expect(local.json().models).toEqual(["local-a", "local-b"]);
+    expect(fetchMock).toHaveBeenLastCalledWith("http://local-llm/v1/models", expect.any(Object));
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ data: [{ id: "gpt-a" }] }), {
+        headers: { "content-type": "application/json" },
+      })
+    );
+    await app.inject({
+      method: "PUT",
+      url: "/api/v1/llm/config",
+      payload: { provider: "openai", base_url: "https://openai.test/v1", api_key: "openai-key", model: "gpt-a" },
+    });
+    const openai = await app.inject({ method: "GET", url: "/api/v1/llm/models" });
+    expect(openai.json().models).toEqual(["gpt-a"]);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "https://openai.test/v1/models",
+      expect.objectContaining({ headers: { authorization: "Bearer openai-key" } })
+    );
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          models: [
+            { name: "models/gemini-a", supportedGenerationMethods: ["generateContent"] },
+            { name: "models/embed-a", supportedGenerationMethods: ["embedContent"] },
+          ],
+        }),
+        { headers: { "content-type": "application/json" } }
+      )
+    );
+    await app.inject({
+      method: "PUT",
+      url: "/api/v1/llm/config",
+      payload: { provider: "gemini", base_url: "https://gemini.test/v1beta", api_key: "gemini-key", model: "gemini-a" },
+    });
+    const gemini = await app.inject({ method: "GET", url: "/api/v1/llm/models" });
+    expect(gemini.json().models).toEqual(["gemini-a"]);
+    expect(fetchMock).toHaveBeenLastCalledWith("https://gemini.test/v1beta/models?key=gemini-key");
+  });
 });
 
 describe("usage analytics", () => {

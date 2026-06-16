@@ -591,7 +591,9 @@ map roles with `LDAP_ADMIN_GROUP` / `LDAP_REVIEWER_GROUP`.
 | `SPECREG_AUTH=required` | Require auth on all non-public routes |
 | `SPECREG_ADMIN_PASSWORD` | Seeded admin password (default `admin`) |
 | `ANTHROPIC_API_KEY` | Anthropic key fallback for server LLM features |
-| `LLM_PROVIDER` | Server LLM provider: `anthropic` or `openai_compatible` |
+| `OPENAI_API_KEY` | OpenAI key fallback for server LLM features |
+| `GEMINI_API_KEY` / `GOOGLE_API_KEY` | Gemini key fallback for server LLM features |
+| `LLM_PROVIDER` | Server LLM provider: `anthropic`, `openai`, `gemini`, or `openai_compatible` |
 | `LLM_MODEL` | Server LLM model name |
 | `LLM_BASE_URL` | Anthropic proxy or OpenAI-compatible local/network endpoint |
 | `LLM_API_KEY` | Server LLM API key; optional for some local endpoints |
@@ -623,6 +625,22 @@ LLM_MODEL=claude-opus-4-8
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
+OpenAI example:
+
+```dotenv
+LLM_PROVIDER=openai
+LLM_MODEL=gpt-4.1
+OPENAI_API_KEY=sk-...
+```
+
+Gemini example:
+
+```dotenv
+LLM_PROVIDER=gemini
+LLM_MODEL=gemini-2.5-pro
+GEMINI_API_KEY=...
+```
+
 Local or network OpenAI-compatible example:
 
 ```dotenv
@@ -643,6 +661,8 @@ LLM_BASE_URL=http://host.docker.internal:11434/v1
 
 OpenAI-compatible mode works with services such as Ollama, LM Studio, vLLM, LocalAI, or an
 internal gateway that exposes `/chat/completions`.
+The Settings page can query available models from Anthropic, OpenAI, Gemini, and
+OpenAI-compatible providers that expose `/models`.
 
 Spec download bundles are ed25519-signed; the keypair is generated on first use and stored
 in the database. `specreg verify` checks bundle provenance against the public key.

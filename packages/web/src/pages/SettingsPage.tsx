@@ -33,6 +33,7 @@ export default function SettingsPage() {
   const [issuedToken, setIssuedToken] = useState<string>();
   const [ldapNotice, setLdapNotice] = useState<string>();
   const [llmNotice, setLlmNotice] = useState<string>();
+  const [llmModels, setLlmModels] = useState<string[]>([]);
 
   const [hookUrl, setHookUrl] = useState("");
   const [hookFormat, setHookFormat] = useState("json");
@@ -259,15 +260,31 @@ export default function SettingsPage() {
                   onChange={(e) => setLlm({ ...llm, provider: e.target.value as LlmConfig["provider"] })}
                 >
                   <option value="anthropic">Anthropic</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="gemini">Gemini</option>
                   <option value="openai_compatible">OpenAI-compatible / local</option>
                 </select>
                 <input
                   type="text"
-                  placeholder={llm.provider === "anthropic" ? "claude-opus-4-8" : "llama3.1"}
+                  placeholder={
+                    llm.provider === "anthropic"
+                      ? "claude-opus-4-8"
+                      : llm.provider === "openai"
+                        ? "gpt-4.1"
+                        : llm.provider === "gemini"
+                          ? "gemini-2.5-pro"
+                          : "llama3.1"
+                  }
                   value={llm.model}
+                  list="llm-model-options"
                   style={{ minWidth: 220 }}
                   onChange={(e) => setLlm({ ...llm, model: e.target.value })}
                 />
+                <datalist id="llm-model-options">
+                  {llmModels.map((model) => (
+                    <option key={model} value={model} />
+                  ))}
+                </datalist>
                 <input
                   type="number"
                   min={1}
@@ -275,6 +292,21 @@ export default function SettingsPage() {
                   style={{ width: 120 }}
                   onChange={(e) => setLlm({ ...llm, max_tokens: Number(e.target.value) })}
                 />
+                <button
+                  onClick={() =>
+                    act(async () => {
+                      const result = await api.llmModels();
+                      setLlmModels(result.models);
+                      setLlmNotice(
+                        result.models.length
+                          ? `Loaded ${result.models.length} model(s) from ${result.provider}.`
+                          : `No models returned by ${result.provider}.`
+                      );
+                    })
+                  }
+                >
+                  Load models
+                </button>
                 <button
                   className="primary"
                   onClick={() =>
@@ -301,6 +333,10 @@ export default function SettingsPage() {
                   placeholder={
                     llm.provider === "anthropic"
                       ? "Optional proxy base URL"
+                      : llm.provider === "openai"
+                        ? "Optional OpenAI-compatible proxy URL"
+                        : llm.provider === "gemini"
+                          ? "Optional Gemini API base URL"
                       : "http://localhost:11434/v1 or http://llm-gateway.internal/v1"
                   }
                   value={llm.base_url}
@@ -350,7 +386,7 @@ export default function SettingsPage() {
                 </button>
               </div>
               <div className="faint">
-                OpenAI-compatible mode supports local/network services such as Ollama, LM Studio, vLLM, LocalAI, or an internal LLM gateway.
+                Use OpenAI or Gemini for hosted providers. OpenAI-compatible mode supports local/network services such as Ollama, LM Studio, vLLM, LocalAI, or an internal LLM gateway.
               </div>
             </div>
           </>

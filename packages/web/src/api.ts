@@ -124,7 +124,7 @@ export interface LdapConfig {
   has_bind_password: boolean;
 }
 export interface LlmConfig {
-  provider: "anthropic" | "openai_compatible";
+  provider: "anthropic" | "openai" | "gemini" | "openai_compatible";
   model: string;
   base_url: string;
   max_tokens: number;
@@ -345,6 +345,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ prompt }),
     }),
+  llmModels: () => request<{ provider: string; models: string[] }>("/api/v1/llm/models"),
   mcpGuide: (projectType?: string) =>
     request<McpGuide>(`/api/v1/ai/mcp-guide${projectType ? `/${encodeURIComponent(projectType)}` : ""}`),
   approvalPolicies: () => request<ApprovalPolicyRow[]>("/api/v1/approval-policies"),
