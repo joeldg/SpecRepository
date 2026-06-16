@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Webhook } from "@specregistry/shared";
 import {
   api,
+  type AppKeyConfig,
   type AuditLogRow,
   type ApiKeyRow,
   type ApprovalPolicyRow,
@@ -26,6 +27,7 @@ export default function SettingsPage() {
   const [keys, setKeys] = useState<ApiKeyRow[]>([]);
   const [ldap, setLdap] = useState<LdapConfig>();
   const [llm, setLlm] = useState<LlmConfig>();
+  const [appKeys, setAppKeys] = useState<AppKeyConfig>();
   const [mcpGuide, setMcpGuide] = useState<McpGuide>();
   const [policies, setPolicies] = useState<ApprovalPolicyRow[]>([]);
   const [auditRows, setAuditRows] = useState<AuditLogRow[]>([]);
@@ -33,6 +35,7 @@ export default function SettingsPage() {
   const [issuedToken, setIssuedToken] = useState<string>();
   const [ldapNotice, setLdapNotice] = useState<string>();
   const [llmNotice, setLlmNotice] = useState<string>();
+  const [appKeyNotice, setAppKeyNotice] = useState<string>();
   const [llmModels, setLlmModels] = useState<string[]>([]);
   const [llmTestStatus, setLlmTestStatus] = useState<"idle" | "running" | "ok" | "error">("idle");
   const [llmTestResult, setLlmTestResult] = useState<string>();
@@ -55,6 +58,9 @@ export default function SettingsPage() {
   const [ldapGroups, setLdapGroups] = useState("");
   const [llmApiKey, setLlmApiKey] = useState("");
   const [llmTestPrompt, setLlmTestPrompt] = useState("Reply with ok.");
+  const [githubToken, setGithubToken] = useState("");
+  const [githubWebhookSecret, setGithubWebhookSecret] = useState("");
+  const [slackSigningSecret, setSlackSigningSecret] = useState("");
   const [mcpTypeName, setMcpTypeName] = useState("");
   const [policyTypeId, setPolicyTypeId] = useState("");
   const [policyGlob, setPolicyGlob] = useState("*.md");
@@ -71,10 +77,11 @@ export default function SettingsPage() {
       api.apiKeys(),
       api.ldapConfig(),
       api.llmConfig(),
+      api.appKeys(),
       api.approvalPolicies(),
       api.auditLog(50),
     ])
-      .then(([w, s, j, t, u, k, l, llmConfig, p, a]) => {
+      .then(([w, s, j, t, u, k, l, llmConfig, appKeyConfig, p, a]) => {
         setWebhooks(w);
         setSubs(s);
         setJobs(j);
@@ -83,6 +90,7 @@ export default function SettingsPage() {
         setKeys(k);
         setLdap(l);
         setLlm(llmConfig);
+        setAppKeys(appKeyConfig);
         setPolicies(p);
         setAuditRows(a);
         setSubTypeId((current) => current || t[0]?.id || "");
@@ -429,6 +437,111 @@ export default function SettingsPage() {
               </div>
             </div>
           </>
+        )}
+      </div>
+
+      <div className="section">
+        <h2>App keys</h2>
+        {appKeys && (
+          <div className="card">
+            {appKeyNotice && <div style={{ marginBottom: 12 }}>{appKeyNotice}</div>}
+            <div className="form-row">
+              <input
+                type="password"
+                placeholder={appKeys.has_github_token ? "GitHub token saved (hidden)" : "GitHub token"}
+                value={githubToken}
+                style={{ flex: 1, minWidth: 260 }}
+                onChange={(e) => setGithubToken(e.target.value)}
+              />
+              {appKeys.has_github_token && <span className="faint">•••••••• saved</span>}
+              {appKeys.has_github_token && (
+                <button
+                  className="danger"
+                  onClick={() =>
+                    act(async () => {
+                      const saved = await api.updateAppKeys({ clear_github_token: true });
+                      setAppKeys(saved);
+                      setAppKeyNotice("GitHub token cleared.");
+                    }, false)
+                  }
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="form-row">
+              <input
+                type="password"
+                placeholder={
+                  appKeys.has_github_webhook_secret ? "GitHub webhook secret saved (hidden)" : "GitHub webhook secret"
+                }
+                value={githubWebhookSecret}
+                style={{ flex: 1, minWidth: 260 }}
+                onChange={(e) => setGithubWebhookSecret(e.target.value)}
+              />
+              {appKeys.has_github_webhook_secret && <span className="faint">•••••••• saved</span>}
+              {appKeys.has_github_webhook_secret && (
+                <button
+                  className="danger"
+                  onClick={() =>
+                    act(async () => {
+                      const saved = await api.updateAppKeys({ clear_github_webhook_secret: true });
+                      setAppKeys(saved);
+                      setAppKeyNotice("GitHub webhook secret cleared.");
+                    }, false)
+                  }
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="form-row">
+              <input
+                type="password"
+                placeholder={appKeys.has_slack_signing_secret ? "Slack signing secret saved (hidden)" : "Slack signing secret"}
+                value={slackSigningSecret}
+                style={{ flex: 1, minWidth: 260 }}
+                onChange={(e) => setSlackSigningSecret(e.target.value)}
+              />
+              {appKeys.has_slack_signing_secret && <span className="faint">•••••••• saved</span>}
+              {appKeys.has_slack_signing_secret && (
+                <button
+                  className="danger"
+                  onClick={() =>
+                    act(async () => {
+                      const saved = await api.updateAppKeys({ clear_slack_signing_secret: true });
+                      setAppKeys(saved);
+                      setAppKeyNotice("Slack signing secret cleared.");
+                    }, false)
+                  }
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <button
+              className="primary"
+              onClick={() =>
+                act(async () => {
+                  const saved = await api.updateAppKeys({
+                    github_token: githubToken || undefined,
+                    github_webhook_secret: githubWebhookSecret || undefined,
+                    slack_signing_secret: slackSigningSecret || undefined,
+                  });
+                  setAppKeys(saved);
+                  setGithubToken("");
+                  setGithubWebhookSecret("");
+                  setSlackSigningSecret("");
+                  setAppKeyNotice("App keys saved. Stored values remain hidden.");
+                }, false)
+              }
+            >
+              Save app keys
+            </button>
+            <div className="faint" style={{ marginTop: 8 }}>
+              GitHub token enables push-back PRs and webhook file fetches. GitHub and Slack secrets verify inbound webhook/action signatures.
+            </div>
+          </div>
         )}
       </div>
 
@@ -799,7 +912,7 @@ export default function SettingsPage() {
             </button>
           </div>
           <span className="faint">
-            Approved spec versions open PRs against subscribed repos. Requires GITHUB_TOKEN on the server.
+            Approved spec versions open PRs against subscribed repos. Configure a GitHub token in App keys or GITHUB_TOKEN on the server.
           </span>
         </div>
         {subs.length === 0 ? (

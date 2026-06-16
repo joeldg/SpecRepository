@@ -5,6 +5,7 @@ import { HttpError } from "../helpers.js";
 import { analyzeCompatibility } from "../lib/compat.js";
 import { createChangeRequest } from "../lib/changes.js";
 import { dispatchWebhooks } from "../lib/events.js";
+import { getAppKeyConfig } from "../lib/appKeys.js";
 
 interface PushEvent {
   ref: string;
@@ -28,8 +29,7 @@ function timingEqual(a: string, b: string): boolean {
   return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
 }
 
-async function fetchRepoFile(repo: string, path: string, ref: string): Promise<string | undefined> {
-  const token = process.env.GITHUB_TOKEN;
+async function fetchRepoFile(token: string, repo: string, path: string, ref: string): Promise<string | undefined> {
   const res = await fetch(
     `https://api.github.com/repos/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(ref)}`,
     {
@@ -60,7 +60,8 @@ export async function integrationRoutes(app: FastifyInstance): Promise<void> {
    * Configure GITHUB_WEBHOOK_SECRET; payload signature is verified (sha256 HMAC).
    */
   app.post("/integrations/github/webhook", async (req, reply) => {
-    const secret = process.env.GITHUB_WEBHOOK_SECRET;
+    const appKeys = getAppKeyConfig(app.db);
+    const secret = appKeys.github_webhook_secret;
     if (!secret) throw new HttpError(503, "GitHub webhook is not configured (set GITHUB_WEBHOOK_SECRET)");
 
     const signature = req.headers["x-hub-signature-256"];
@@ -110,7 +111,7 @@ export async function integrationRoutes(app: FastifyInstance): Promise<void> {
           skipped.push(`${filename}: already pending review`);
           continue;
         }
-        const content = await fetchRepoFile(sub.repo, filePath, event.head_commit?.id ?? branch!);
+        const content = await fetchRepoFile(appKeys.github_token, sub.repo, filePath, event.head_commit?.id ?? branch!);
         if (content === undefined) {
           skipped.push(`${filename}: could not fetch content (GITHUB_TOKEN missing or file gone)`);
           continue;
@@ -146,7 +147,7 @@ export async function integrationRoutes(app: FastifyInstance): Promise<void> {
    * app's interactivity URL at this route.
    */
   app.post("/integrations/slack/actions", async (req) => {
-    const secret = process.env.SLACK_SIGNING_SECRET;
+    const secret = getAppKeyConfig(app.db).slack_signing_secret;
     if (!secret) throw new HttpError(503, "Slack interactivity is not configured (set SLACK_SIGNING_SECRET)");
 
     const timestamp = req.headers["x-slack-request-timestamp"];

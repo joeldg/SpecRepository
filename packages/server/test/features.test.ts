@@ -306,6 +306,37 @@ describe("AI draft-fix", () => {
 });
 
 describe("LLM settings", () => {
+  it("saves app keys without returning secret values", async () => {
+    const saved = await app.inject({
+      method: "PUT",
+      url: "/api/v1/app-keys",
+      payload: {
+        github_token: "ghp_secret",
+        github_webhook_secret: "github-hook-secret",
+        slack_signing_secret: "slack-secret",
+      },
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json()).toEqual({
+      has_github_token: true,
+      has_github_webhook_secret: true,
+      has_slack_signing_secret: true,
+    });
+    expect(saved.body).not.toContain("ghp_secret");
+    expect(saved.body).not.toContain("github-hook-secret");
+    expect(saved.body).not.toContain("slack-secret");
+
+    const loaded = await app.inject({ method: "GET", url: "/api/v1/app-keys" });
+    expect(loaded.json()).toEqual(saved.json());
+
+    const cleared = await app.inject({
+      method: "PUT",
+      url: "/api/v1/app-keys",
+      payload: { clear_slack_signing_secret: true },
+    });
+    expect(cleared.json()).toMatchObject({ has_slack_signing_secret: false });
+  });
+
   it("saves OpenAI-compatible local provider settings and tests the connection", async () => {
     const saved = await app.inject({
       method: "PUT",

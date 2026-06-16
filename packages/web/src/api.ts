@@ -130,6 +130,11 @@ export interface LlmConfig {
   max_tokens: number;
   has_api_key: boolean;
 }
+export interface AppKeyConfig {
+  has_github_token: boolean;
+  has_github_webhook_secret: boolean;
+  has_slack_signing_secret: boolean;
+}
 export interface McpGuide {
   filename: string;
   project_type: string | null;
@@ -346,6 +351,17 @@ export const api = {
       body: JSON.stringify({ prompt, max_tokens }),
     }),
   llmModels: () => request<{ provider: string; models: string[] }>("/api/v1/llm/models"),
+  appKeys: () => request<AppKeyConfig>("/api/v1/app-keys"),
+  updateAppKeys: (
+    body: Partial<{
+      github_token: string;
+      github_webhook_secret: string;
+      slack_signing_secret: string;
+      clear_github_token: boolean;
+      clear_github_webhook_secret: boolean;
+      clear_slack_signing_secret: boolean;
+    }>
+  ) => request<AppKeyConfig>("/api/v1/app-keys", { method: "PUT", body: JSON.stringify(body) }),
   mcpGuide: (projectType?: string) =>
     request<McpGuide>(`/api/v1/ai/mcp-guide${projectType ? `/${encodeURIComponent(projectType)}` : ""}`),
   approvalPolicies: () => request<ApprovalPolicyRow[]>("/api/v1/approval-policies"),

@@ -12,8 +12,32 @@ import {
 import { actorFrom, recordAudit } from "../lib/auditLog.js";
 import { processSyncJobs } from "../lib/github.js";
 import { listLlmModels, publicLlmConfig, runLlmText, saveLlmConfig, type LlmConfig } from "../lib/llm.js";
+import { getAppKeyConfig, publicAppKeyConfig, saveAppKeyConfig, type AppKeyConfig } from "../lib/appKeys.js";
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
+  // --- App keys / integration secrets ---
+
+  app.get("/app-keys", async () => {
+    return publicAppKeyConfig(app.db);
+  });
+
+  app.put("/app-keys", async (req) => {
+    const body = (req.body ?? {}) as Partial<AppKeyConfig> & {
+      clear_github_token?: boolean;
+      clear_github_webhook_secret?: boolean;
+      clear_slack_signing_secret?: boolean;
+    };
+    const saved = publicAppKeyConfig(app.db, saveAppKeyConfig(app.db, body));
+    recordAudit(app.db, {
+      actor: actorFrom(req, "settings"),
+      action: "app_keys.updated",
+      target_type: "app_keys",
+      summary: "App keys updated",
+      detail: { ...saved },
+    });
+    return saved;
+  });
+
   // --- LLM provider settings ---
 
   app.get("/llm/config", async () => {
@@ -350,7 +374,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post("/sync-jobs/run", async (req) => {
-    const results = await processSyncJobs(app.db, process.env.GITHUB_TOKEN);
+    const results = await processSyncJobs(app.db, getAppKeyConfig(app.db).github_token);
     recordAudit(app.db, {
       actor: actorFrom(req, "settings"),
       action: "sync_jobs.run",

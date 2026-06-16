@@ -441,10 +441,13 @@ Use webhooks and chat integrations to push SDD events into the places teams alre
 
 - JSON webhooks for publish, review, and feedback events.
 - Slack-formatted webhooks for review visibility.
-- Slack interactive approve/reject actions with `SLACK_SIGNING_SECRET`.
+- Slack interactive approve/reject actions with a Slack signing secret.
 - Google Chat-formatted webhook payloads.
 - GitHub repo subscriptions that open pull requests when approved specs change.
 - HMAC-verified inbound GitHub push webhooks that convert repo-side spec edits into reviews.
+
+GitHub and Slack app keys can be configured on the Settings page or with environment variables.
+Saved values are never returned to the browser; Settings only shows whether each key is present.
 
 ### Authentication, Roles, and LDAP Usage
 
@@ -496,7 +499,7 @@ Use the LDAP tester in Settings before switching users over.
   contradiction report. Proposed normative statements are compared with published global
   and project-type specs so reviewers can see possible conflicts before approval.
 - **Distribution** — `specreg check` gates CI on spec drift; repo subscriptions open
-  GitHub PRs with updated specs on approval (set `GITHUB_TOKEN` on the server);
+  GitHub PRs with updated specs on approval (configure a GitHub token in Settings or set `GITHUB_TOKEN`);
   webhooks (JSON or Slack format) fire on publish/review/feedback events.
 - **Search & analytics** — `GET /api/v1/ai/search?q=` serves section-level FTS5 hits
   to agents and the Search page; usage events (pulls, agent reads, searches, drift
@@ -598,9 +601,9 @@ map roles with `LDAP_ADMIN_GROUP` / `LDAP_REVIEWER_GROUP`.
 | `LLM_BASE_URL` | Anthropic proxy or OpenAI-compatible local/network endpoint |
 | `LLM_API_KEY` | Server LLM API key; optional for some local endpoints |
 | `LLM_MAX_TOKENS` | Default server LLM token budget |
-| `GITHUB_TOKEN` | Git push-back PRs + inbound webhook file fetch |
-| `GITHUB_WEBHOOK_SECRET` | Verify inbound GitHub push webhooks |
-| `SLACK_SIGNING_SECRET` | Verify Slack interactive approve/reject actions |
+| `GITHUB_TOKEN` | Git push-back PRs + inbound webhook file fetch; fallback if not saved in Settings |
+| `GITHUB_WEBHOOK_SECRET` | Verify inbound GitHub push webhooks; fallback if not saved in Settings |
+| `SLACK_SIGNING_SECRET` | Verify Slack interactive approve/reject actions; fallback if not saved in Settings |
 | `LDAP_URL` (+ `LDAP_*`) | Optional LDAP authentication |
 
 ### Client environment variables

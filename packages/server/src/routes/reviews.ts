@@ -8,6 +8,7 @@ import { actorFrom, recordAudit } from "../lib/auditLog.js";
 import { dispatchWebhooks } from "../lib/events.js";
 import { enqueueSyncJobs, processSyncJobs } from "../lib/github.js";
 import { reindexSpec } from "../lib/search.js";
+import { getAppKeyConfig } from "../lib/appKeys.js";
 
 function requireChangeRequest(app: FastifyInstance, id: string): ChangeRequest {
   const cr = app.db.prepare("SELECT * FROM change_requests WHERE id = ?").get(id) as
@@ -187,9 +188,10 @@ export async function reviewRoutes(app: FastifyInstance): Promise<void> {
     if (channel === "stable") {
       reindexSpec(app.db, updated);
       const queued = enqueueSyncJobs(app.db, updated);
-      if (queued > 0 && process.env.GITHUB_TOKEN) {
+      const githubToken = getAppKeyConfig(app.db).github_token;
+      if (queued > 0 && githubToken) {
         // Push-back PRs run in the background; failures land on the job rows.
-        void processSyncJobs(app.db, process.env.GITHUB_TOKEN);
+        void processSyncJobs(app.db, githubToken);
       }
     }
     await dispatchWebhooks(
