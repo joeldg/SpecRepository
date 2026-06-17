@@ -97,10 +97,12 @@ When filing feedback, the agent should state which gate failed:
 `specreg compile --target cursor` writes `.cursorrules`.
 
 Compiled files are generated from the registry's approved specs. They include a generated
-marker, an `Agent Decision Gate` section that defines clear/complete/consistent/current,
-and the approved spec contents. They should not be hand-edited. When `specreg compile`
-runs, the target is remembered in `specs/.specregistry.json`; later `specreg sync`
-regenerates remembered targets after pulling newer approved specs.
+marker, a `SpecRegistry Operating Rules` section that tells agents to prefer MCP and avoid
+hand-editing generated governance files, an `Agent Decision Gate` section that defines
+clear/complete/consistent/current, and the approved spec contents. They should not be
+hand-edited. When `specreg compile` runs, the target is remembered in
+`specs/.specregistry.json`; later `specreg sync` regenerates remembered targets after
+pulling newer approved specs.
 
 ## MCP Tools
 
