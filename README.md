@@ -611,7 +611,9 @@ Use the LDAP tester in Settings before switching users over.
 
 - **Hierarchy** — project types are rows, not code. A seeded `scope=global` type holds
   organization-wide specs; every download/agent query bundles global + type specs.
-  The Acme types are just seed data (`packages/server/src/seed.ts`).
+  The Acme types are demo seed data; additional built-in starter types include MCP Server
+  / Agent Integration, SaaS Backend API, CLI Tool / Developer Tooling, AI-SDD Governed
+  Project, Data Platform / ETL Pipeline, Internal Admin Tool, and Mobile App.
 - **Lifecycle** — new specs start as `0.1.0` drafts and are edited directly. Publishing
   makes them `1.0.0`. Published specs only change through a change request
   (`POST /api/v1/specs/review`): the server stores a unified diff, the spec enters

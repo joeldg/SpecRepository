@@ -26,9 +26,20 @@ async function getJson(url: string) {
 describe("project types & specs", () => {
   it("lists seeded project types with the global scope first", async () => {
     const types = await getJson("/api/v1/project-types");
-    expect(types.length).toBe(4);
+    expect(types.length).toBe(11);
     expect(types[0].scope).toBe("global");
     expect(types.map((t: any) => t.name)).toContain("Acme Edge Device");
+    expect(types.map((t: any) => t.name)).toEqual(
+      expect.arrayContaining([
+        "MCP Server / Agent Integration",
+        "SaaS Backend API",
+        "CLI Tool / Developer Tooling",
+        "AI-SDD Governed Project",
+        "Data Platform / ETL Pipeline",
+        "Internal Admin Tool",
+        "Mobile App",
+      ])
+    );
   });
 
   it("lists all specs as summaries with counts", async () => {

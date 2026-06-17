@@ -47,6 +47,64 @@ function insertProjectType(
   return id;
 }
 
+const DEFAULT_PROJECT_TYPES = [
+  {
+    name: "MCP Server / Agent Integration",
+    industry: "AI / Developer Tools",
+    description:
+      "Model Context Protocol servers, agent tool schemas, prompt/context contracts, feedback loops, and agent onboarding.",
+  },
+  {
+    name: "SaaS Backend API",
+    industry: "Software / SaaS",
+    description:
+      "Multi-tenant APIs, authentication, database migrations, billing/webhooks, observability, rate limits, and compatibility contracts.",
+  },
+  {
+    name: "CLI Tool / Developer Tooling",
+    industry: "Developer Tools",
+    description:
+      "Command-line tools, flags, config files, exit codes, stdout/stderr contracts, CI behavior, and backwards compatibility.",
+  },
+  {
+    name: "AI-SDD Governed Project",
+    industry: "AI / Software Delivery",
+    description:
+      "Strict Spec Driven Development with tokenomics, spec conflict detection, audit prompts, agent feedback, and generated context rules.",
+  },
+  {
+    name: "Data Platform / ETL Pipeline",
+    industry: "Data Engineering",
+    description:
+      "Schemas, lineage, batch/stream processing, idempotency, backfills, PII handling, data quality checks, and warehouse contracts.",
+  },
+  {
+    name: "Internal Admin Tool",
+    industry: "Operations Software",
+    description:
+      "Dense operational dashboards, auditability, role-based access, data tables/forms, imports/exports, and repeatable workflows.",
+  },
+  {
+    name: "Mobile App",
+    industry: "Mobile Software",
+    description:
+      "iOS, Android, or React Native apps with offline behavior, permissions, app store release, analytics, crash reporting, and deep links.",
+  },
+] satisfies Array<{ name: string; industry: string; description: string }>;
+
+function seedDefaultProjectTypes(db: Db): number {
+  let inserted = 0;
+  for (const projectType of DEFAULT_PROJECT_TYPES) {
+    const existing = db
+      .prepare("SELECT id FROM project_types WHERE name = ? COLLATE NOCASE")
+      .get(projectType.name);
+    if (existing) continue;
+    insertProjectType(db, projectType.name, "project_type", projectType.industry, projectType.description);
+    inserted++;
+  }
+  return inserted;
+}
+
 function insertPublishedSpec(db: Db, projectTypeId: string, spec: SeedSpec): void {
   const id = uuid();
   const ts = now();
@@ -128,7 +186,10 @@ export function seed(db: Db): boolean {
   seedTemplates(db);
   seedAdmin(db);
   const existing = db.prepare("SELECT COUNT(*) AS n FROM project_types").get() as { n: number };
-  if (existing.n > 0) return false;
+  if (existing.n > 0) {
+    seedDefaultProjectTypes(db);
+    return false;
+  }
 
   const globalId = insertProjectType(
     db,
@@ -312,6 +373,8 @@ All mutations go through the API layer; the frontend never writes to storage dir
 - \`src/web/main.tsx\` — frontend entry
 `,
   });
+
+  seedDefaultProjectTypes(db);
 
   const insertStub = db.prepare(
     `INSERT INTO stub_prompts (id, target_filename, template, description, project_type_id)
