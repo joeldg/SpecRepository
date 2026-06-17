@@ -17,6 +17,29 @@ interface BundleSpec extends Spec {
   project_name?: string | null;
 }
 
+const AGENT_DECISION_GATE = `## Agent Decision Gate
+
+Before coding, verify the applicable specs are clear, complete, consistent, and current.
+
+Proceed only when you can state: "For this task, spec <filename>@<version> section <section> requires <behavior>, and the implementation will satisfy it by <specific action/test>."
+
+File SpecRegistry feedback instead of guessing when any gate fails:
+
+| Gate | Proceed when | File feedback when |
+| --- | --- | --- |
+| Clear | The relevant section gives a single actionable rule, requirement, or acceptance criterion. | The spec is vague, leaves a key decision open, or supports multiple reasonable interpretations. |
+| Complete | Inputs, outputs, boundaries, non-goals, failure behavior, and acceptance expectations are sufficient for the change. | Required details are missing, such as status codes, data shape, ownership, security behavior, or test expectations. |
+| Consistent | Global, project-type, and project-scoped specs can all be followed at the same time. | Two specs, two sections, or a spec and project override require incompatible behavior. |
+| Current | Referenced files, APIs, commands, architecture, and operational assumptions still match the codebase or are explicitly targeted future state. | The spec points to removed APIs, renamed files, obsolete workflows, stale infrastructure, or superseded behavior. |
+
+Feedback type mapping:
+
+- Use \`ambiguity\` when the Clear or Complete gate fails.
+- Use \`contradiction\` when the Consistent gate fails.
+- Use \`outdated\` when the Current gate fails.
+
+When reporting feedback, include the affected \`spec_id\`, what you were trying to do, the exact unclear/conflicting/outdated guidance, relevant code or spec context, and the decision you needed from the spec.`;
+
 /** The published spec set for a project type or concrete project (global -> type -> project), with channel overlay. */
 export function bundleSpecs(db: Db, projectTypeId: string, channel = "stable", projectId?: string): BundleSpec[] {
   const rows = db
@@ -84,6 +107,8 @@ export function compileBundle(
     `_Compiled ${now()}${channel !== "stable" ? ` · channel: ${channel}` : ""} · ${included
       .map((s) => `${s.filename}@${s.version}`)
       .join(" · ")}_`,
+    "",
+    AGENT_DECISION_GATE,
     "",
   ];
   for (const spec of specs) {
