@@ -426,4 +426,122 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
     return { window_days: 30, events: byType, top_project_types: topTypes, stale_specs: stale };
   });
+
+  app.get("/reports/overview", async () => {
+    const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+    const staleCutoff = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
+
+    const scopeRows = app.db
+      .prepare(
+        `SELECT
+           CASE WHEN s.project_id IS NOT NULL THEN 'project' ELSE pt.scope END AS scope,
+           s.status,
+           COUNT(*) AS n
+         FROM specs s
+         JOIN project_types pt ON pt.id = s.project_type_id
+         GROUP BY scope, s.status`
+      )
+      .all() as Array<{ scope: string; status: string; n: number }>;
+
+    const feedbackByType = app.db
+      .prepare("SELECT error_type, status, COUNT(*) AS n FROM agent_feedback GROUP BY error_type, status")
+      .all() as Array<{ error_type: string; status: string; n: number }>;
+
+    const projectTypes = app.db
+      .prepare(
+        `SELECT pt.id, pt.name, pt.scope, pt.industry,
+                COUNT(DISTINCT CASE WHEN s.project_id IS NULL THEN s.id END) AS spec_count,
+                COUNT(DISTINCT CASE WHEN s.status = 'published' AND s.project_id IS NULL THEN s.id END) AS published_specs,
+                COUNT(DISTINCT CASE WHEN s.project_id IS NOT NULL THEN s.id END) AS project_spec_count,
+                COUNT(DISTINCT rc.id) AS project_count,
+                COUNT(DISTINCT CASE WHEN af.status = 'open' THEN af.id END) AS open_feedback,
+                COUNT(DISTINCT af.id) AS feedback_total,
+                COUNT(DISTINCT CASE WHEN cr.status = 'pending' THEN cr.id END) AS pending_reviews,
+                COUNT(DISTINCT CASE WHEN s.status = 'published' AND s.updated_at < ? THEN s.id END) AS stale_specs,
+                COUNT(DISTINCT er.id) AS efficacy_runs,
+                COUNT(DISTINCT CASE WHEN er.improved = 1 THEN er.id END) AS efficacy_improved
+         FROM project_types pt
+         LEFT JOIN specs s ON s.project_type_id = pt.id
+         LEFT JOIN repo_consumers rc ON rc.project_type_id = pt.id
+         LEFT JOIN agent_feedback af ON af.spec_id = s.id
+         LEFT JOIN change_requests cr ON cr.spec_id = s.id
+         LEFT JOIN efficacy_runs er ON er.spec_id = s.id
+         GROUP BY pt.id
+         ORDER BY pt.scope = 'global' DESC, pt.name`
+      )
+      .all(staleCutoff);
+
+    const usageRows = app.db
+      .prepare(
+        `SELECT pt.id AS project_type_id, ue.event_type, COUNT(*) AS n
+         FROM usage_events ue
+         JOIN project_types pt ON pt.id = ue.project_type_id
+         WHERE ue.created_at >= ?
+         GROUP BY pt.id, ue.event_type`
+      )
+      .all(since) as Array<{ project_type_id: string; event_type: string; n: number }>;
+    const usageByType = new Map<string, Record<string, number>>();
+    for (const row of usageRows) {
+      usageByType.set(row.project_type_id, {
+        ...(usageByType.get(row.project_type_id) ?? {}),
+        [row.event_type]: row.n,
+      });
+    }
+
+    const projects = app.db
+      .prepare(
+        `SELECT rc.id, rc.repo, rc.branch, rc.project_type_id, pt.name AS project_type_name,
+                rc.specs_path, rc.manifest_path, rc.last_seen_at,
+                COUNT(DISTINCT rcs.filename) AS reported_specs,
+                COUNT(DISTINCT ps.id) AS project_specs,
+                COUNT(DISTINCT CASE WHEN af.status = 'open' THEN af.id END) AS open_feedback,
+                COUNT(DISTINCT af.id) AS feedback_total,
+                COUNT(DISTINCT CASE WHEN cr.status = 'pending' THEN cr.id END) AS pending_reviews,
+                COUNT(DISTINCT CASE
+                  WHEN s.status = 'published'
+                   AND (s.project_id = rc.id OR (s.project_id IS NULL AND (s.project_type_id = rc.project_type_id OR s.project_type_id IN (SELECT id FROM project_types WHERE scope = 'global'))))
+                   AND (rcs.version IS NULL OR rcs.version != s.current_version)
+                  THEN s.id
+                END) AS outdated_specs
+         FROM repo_consumers rc
+         JOIN project_types pt ON pt.id = rc.project_type_id
+         LEFT JOIN repo_consumer_specs rcs ON rcs.consumer_id = rc.id
+         LEFT JOIN specs ps ON ps.project_id = rc.id
+         LEFT JOIN specs s ON s.project_id = rc.id OR (s.project_id IS NULL AND (s.project_type_id = rc.project_type_id OR s.project_type_id IN (SELECT id FROM project_types WHERE scope = 'global')))
+         LEFT JOIN agent_feedback af ON af.spec_id = ps.id
+         LEFT JOIN change_requests cr ON cr.spec_id = ps.id
+         GROUP BY rc.id
+         ORDER BY rc.last_seen_at DESC, rc.repo`
+      )
+      .all();
+
+    const globalSpecs = app.db
+      .prepare(
+        `SELECT s.id, s.filename, s.current_version, s.status, s.updated_at,
+                COUNT(DISTINCT CASE WHEN af.status = 'open' THEN af.id END) AS open_feedback,
+                COUNT(DISTINCT af.id) AS feedback_total,
+                COUNT(DISTINCT CASE WHEN cr.status = 'pending' THEN cr.id END) AS pending_reviews,
+                COUNT(DISTINCT er.id) AS efficacy_runs,
+                COUNT(DISTINCT CASE WHEN er.improved = 1 THEN er.id END) AS efficacy_improved
+         FROM specs s
+         JOIN project_types pt ON pt.id = s.project_type_id
+         LEFT JOIN agent_feedback af ON af.spec_id = s.id
+         LEFT JOIN change_requests cr ON cr.spec_id = s.id
+         LEFT JOIN efficacy_runs er ON er.spec_id = s.id
+         WHERE pt.scope = 'global' AND s.project_id IS NULL
+         GROUP BY s.id
+         ORDER BY s.filename`
+      )
+      .all();
+
+    return {
+      generated_at: now(),
+      window_days: 30,
+      scopes: scopeRows,
+      feedback_by_type: feedbackByType,
+      project_types: projectTypes.map((row: any) => ({ ...row, usage: usageByType.get(row.id) ?? {} })),
+      projects,
+      global_specs: globalSpecs,
+    };
+  });
 }

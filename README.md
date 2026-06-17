@@ -543,6 +543,11 @@ Use the LDAP tester in Settings before switching users over.
   to agents and the Search page; usage events (pulls, agent reads, searches, drift
   checks) roll up on the dashboard, including stale-but-published spec detection.
   Search and agent spec responses include stable section anchors/permalinks for exact citations.
+- **Granular reports** — the Reports page and `GET /api/v1/reports/overview` break SDD
+  health down by global specs, project types, and individual projects, with scope mix,
+  feedback mix, review risk, stale specs, efficacy outcomes, and project drift counts.
+  The page also includes an AI reporting test bench for synthetic feedback plus audit
+  and efficacy smoke tests against the configured LLM provider.
 - **Review SLA** — `GET /api/v1/reviews/sla` summarizes pending review age, warnings,
   breached reviews, and remaining approvals. The dashboard surfaces the oldest pending
   review and breached/warning counts.
@@ -605,7 +610,8 @@ GET  /api/v1/specs/:type/download[?channel=beta]   GET /api/v1/meta/public-key
 POST /api/v1/cli/stub-prompts           POST /api/v1/cli/sync-check
 GET/POST/PUT/DELETE /api/v1/templates   GET/POST/DELETE /api/v1/webhooks
 GET/POST/DELETE /api/v1/subscriptions   GET /api/v1/sync-jobs · POST /api/v1/sync-jobs/run
-GET  /api/v1/analytics/summary          POST /api/v1/auth/login · GET /api/v1/auth/me
+GET  /api/v1/analytics/summary          GET /api/v1/reports/overview
+POST /api/v1/auth/login                 GET /api/v1/auth/me
 GET/POST /api/v1/auth/users             GET/POST/DELETE /api/v1/auth/api-keys
 GET/PUT /api/v1/ldap/config             POST /api/v1/ldap/test · POST /api/v1/ldap/role-preview
 GET  /api/v1/audit-log

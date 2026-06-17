@@ -8,6 +8,7 @@ import SpecDetailPage from "./pages/SpecDetailPage";
 import ReviewsPage from "./pages/ReviewsPage";
 import ReviewDetailPage from "./pages/ReviewDetailPage";
 import FeedbackPage from "./pages/FeedbackPage";
+import ReportsPage from "./pages/ReportsPage";
 import ProjectTypesPage from "./pages/ProjectTypesPage";
 import SearchPage from "./pages/SearchPage";
 import TemplatesPage from "./pages/TemplatesPage";
@@ -37,6 +38,9 @@ export default function App() {
         </NavLink>
         <NavLink to="/feedback" className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
           AI Feedback
+        </NavLink>
+        <NavLink to="/reports" className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
+          Reports
         </NavLink>
         <NavLink to="/search" className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
           Search
@@ -92,6 +96,7 @@ export default function App() {
           <Route path="/reviews" element={<ReviewsPage />} />
           <Route path="/reviews/:id" element={<ReviewDetailPage />} />
           <Route path="/feedback" element={<FeedbackPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/project-types" element={<ProjectTypesPage />} />
           <Route path="/templates" element={<TemplatesPage />} />

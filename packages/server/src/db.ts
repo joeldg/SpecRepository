@@ -352,6 +352,13 @@ export function createDb(path: string): Db {
   const db = new Database(path);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
+  const hasSpecs = Boolean(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'specs'").get());
+  if (hasSpecs) {
+    const specsColumns = db.prepare("PRAGMA table_info(specs)").all() as Array<{ name: string }>;
+    if (!specsColumns.some((column) => column.name === "project_id")) {
+      db.exec("ALTER TABLE specs ADD COLUMN project_id TEXT REFERENCES repo_consumers(id)");
+    }
+  }
   const hasSettings = Boolean(
     db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'settings'").get()
   );

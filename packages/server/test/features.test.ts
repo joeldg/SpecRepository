@@ -561,4 +561,42 @@ describe("usage analytics", () => {
     expect(summary.events.agent_read).toBe(2);
     expect(summary.top_project_types.length).toBeGreaterThan(0);
   });
+
+  it("builds granular reports for scopes, project types, projects, and AI feedback", async () => {
+    const spec = await findSpec("API.md", "Acme Edge Device");
+    const feedback = await app.inject({
+      method: "POST",
+      url: "/api/v1/ai/feedback",
+      payload: {
+        spec_id: spec.id,
+        spec_version: spec.current_version,
+        agent_identifier: "report-test-agent",
+        error_type: "ambiguity",
+        description: "Report smoke test feedback",
+      },
+    });
+    expect(feedback.statusCode).toBe(201);
+    await app.inject({
+      method: "POST",
+      url: "/api/v1/cli/manifest-report",
+      payload: {
+        repo: "github.com/acme/reporting",
+        project_type: "Acme Edge Device",
+        specs: [{ filename: "API.md", version: "0.9.0", project_type: "Acme Edge Device" }],
+      },
+    });
+
+    const report = await getJson("/api/v1/reports/overview");
+    expect(report.scopes.some((row: any) => row.scope === "global")).toBe(true);
+    expect(report.feedback_by_type).toContainEqual(expect.objectContaining({ error_type: "ambiguity", status: "open", n: 1 }));
+    expect(report.project_types.find((row: any) => row.name === "Acme Edge Device")).toMatchObject({
+      open_feedback: 1,
+      project_count: 1,
+    });
+    expect(report.projects.find((row: any) => row.repo === "github.com/acme/reporting")).toMatchObject({
+      project_type_name: "Acme Edge Device",
+      reported_specs: 1,
+    });
+    expect(report.global_specs.length).toBeGreaterThan(0);
+  });
 });

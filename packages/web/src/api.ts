@@ -99,6 +99,57 @@ export interface AnalyticsSummary {
     project_type_name: string;
   }>;
 }
+export interface ReportsOverview {
+  generated_at: string;
+  window_days: number;
+  scopes: Array<{ scope: "global" | "project_type" | "project"; status: string; n: number }>;
+  feedback_by_type: Array<{ error_type: string; status: string; n: number }>;
+  project_types: Array<{
+    id: string;
+    name: string;
+    scope: string;
+    industry: string | null;
+    spec_count: number;
+    published_specs: number;
+    project_spec_count: number;
+    project_count: number;
+    open_feedback: number;
+    feedback_total: number;
+    pending_reviews: number;
+    stale_specs: number;
+    efficacy_runs: number;
+    efficacy_improved: number;
+    usage: Record<string, number>;
+  }>;
+  projects: Array<{
+    id: string;
+    repo: string;
+    branch: string | null;
+    project_type_id: string;
+    project_type_name: string;
+    specs_path: string;
+    manifest_path: string;
+    last_seen_at: string;
+    reported_specs: number;
+    project_specs: number;
+    open_feedback: number;
+    feedback_total: number;
+    pending_reviews: number;
+    outdated_specs: number;
+  }>;
+  global_specs: Array<{
+    id: string;
+    filename: string;
+    current_version: string;
+    status: string;
+    updated_at: string;
+    open_feedback: number;
+    feedback_total: number;
+    pending_reviews: number;
+    efficacy_runs: number;
+    efficacy_improved: number;
+  }>;
+}
 export interface SearchHit {
   spec_id: string;
   filename: string;
@@ -290,6 +341,14 @@ export const api = {
     request<FeedbackRow[]>(`/api/v1/ai/feedback${status ? `?status=${status}` : ""}`),
   feedbackClusters: (status?: string) =>
     request<FeedbackCluster[]>(`/api/v1/ai/feedback/clusters${status ? `?status=${status}` : ""}`),
+  createFeedback: (body: {
+    spec_id: string;
+    spec_version?: string;
+    agent_identifier: string;
+    error_type: "ambiguity" | "contradiction" | "outdated";
+    description: string;
+    context_code_snippet?: string;
+  }) => request<AgentFeedback>("/api/v1/ai/feedback", { method: "POST", body: JSON.stringify(body) }),
   setFeedbackStatus: (id: string, status: string) =>
     request<AgentFeedback>(`/api/v1/ai/feedback/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
   draftFix: (feedbackId: string) =>
@@ -326,6 +385,7 @@ export const api = {
     request<{ processed: number }>("/api/v1/sync-jobs/run", { method: "POST", body: JSON.stringify({}) }),
 
   analytics: () => request<AnalyticsSummary>("/api/v1/analytics/summary"),
+  reports: () => request<ReportsOverview>("/api/v1/reports/overview"),
   auditLog: (limit = 100) => request<AuditLogRow[]>(`/api/v1/audit-log?limit=${limit}`),
 
   login: (username: string, password: string) =>
@@ -395,6 +455,11 @@ export const api = {
     }),
   runEfficacy: (spec_id: string, task_prompt: string) =>
     request<EfficacyRun>("/api/v1/ai/efficacy", { method: "POST", body: JSON.stringify({ spec_id, task_prompt }) }),
+  runAudit: (body: { project_type: string; tree: string; files: Array<{ path: string; content: string }> }) =>
+    request<{ project_type: string; findings: unknown[]; finding_count: number }>("/api/v1/ai/audit", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   updateProjectType: (id: string, body: Record<string, unknown>) =>
     request<ProjectType>(`/api/v1/project-types/${id}`, { method: "PUT", body: JSON.stringify(body) }),
 };
