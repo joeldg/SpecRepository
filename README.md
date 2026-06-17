@@ -150,6 +150,8 @@ docker compose --profile metrics up --build
 
 The Alloy service reads [config/alloy/config.alloy](config/alloy/config.alloy), scrapes
 `specregistry:4000/metrics`, and forwards samples to the configured remote-write endpoint.
+For the full metric catalog and source queries, see
+[README-METRICS.md](README-METRICS.md).
 
 ## First-Time Setup
 
@@ -463,6 +465,8 @@ Useful metrics include:
 - `specregistry_usage_events_total`
 - `specregistry_audit_events_total`
 - `specregistry_efficacy_runs_total`
+
+See [README-METRICS.md](README-METRICS.md) for where and how each metric is generated.
 
 Run Grafana Alloy through Compose:
 
