@@ -784,3 +784,39 @@ OpenAI-compatible providers that expose `/models`.
 
 Spec download bundles are ed25519-signed; the keypair is generated on first use and stored
 in the database. `specreg verify` checks bundle provenance against the public key.
+
+### Automation feature flags
+
+Automation APIs are enabled by default. Set any flag to `false`, `0`, `off`, or `no` to
+disable that capability for a deployment. The Generate Specs workbench reads
+`GET /api/v1/automation/features` and disables controls for unavailable features.
+
+LLM-backed automation only runs when both conditions are true:
+
+1. `SPECREG_AUTOMATION_LLM_GENERATION` is enabled.
+2. The request explicitly asks for LLM use, such as the workbench **Use server LLM** toggle.
+
+Without LLM mode, automation endpoints use deterministic templates, spec metadata, repo
+evidence, and existing registry telemetry. This keeps CI/server deployments usable even when
+no model provider is configured.
+
+### Troubleshooting
+
+- **CLI command not found**: run `npm run build`, then `npm link -w @specregistry/cli -w @specregistry/mcp`,
+  or invoke `node packages/cli/dist/index.js ...` directly.
+- **Agents cannot reach the registry in Docker**: set `SPECREG_PUBLIC_URL` to the URL reachable
+  from developer machines and agent environments.
+- **Auth-required CLI/MCP calls fail**: pass `--token <token>` or set `SPECREG_TOKEN`.
+- **LLM features say a key is missing**: configure the provider on Settings or set the matching
+  `LLM_*` / provider API key environment variables.
+- **Local model server is on the host while SpecRegistry runs in Docker**: use
+  `http://host.docker.internal:<port>/v1` as `LLM_BASE_URL` on macOS/Windows.
+- **Generated specs conflict with governed files**: keep generated drafts outside `specs/`
+  until `specreg submit-drafts` sends them through the registry workflow.
+
+### Further reading
+
+- [Product specification](docs/SPEC.md)
+- [SDD and tokenomics operating model](docs/SDD_TOKENOMICS.md)
+- [Add-on backlog](docs/TODO.md)
+- [AI-SDD sample spec pack](samples/ai-sdd/README.md)
