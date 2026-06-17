@@ -120,5 +120,18 @@ server.tool(
   }
 );
 
+server.tool(
+  "get_audit_prompt",
+  "Fetch a reverse-conformance audit prompt for a governed spec. Use this before auditing whether code follows a spec's intent and requirements.",
+  {
+    spec_id: z.string().describe("Spec id from get_specs/search_specs results."),
+    use_llm: z.boolean().optional().describe("Ask the registry server LLM to improve the prompt when enabled."),
+  },
+  async ({ spec_id, use_llm }) => {
+    const suffix = use_llm ? "?use_llm=true" : "";
+    return text(await api(`/api/v1/automation/audit-prompt/${encodeURIComponent(spec_id)}${suffix}`));
+  }
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);

@@ -578,6 +578,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ spec_id, use_llm }),
     }),
+  auditPromptGet: (spec_id: string, use_llm?: boolean) =>
+    request<{ spec_id: string; filename: string; version: string; prompt: string; model: string | null; provider: string | null }>(
+      `/api/v1/automation/audit-prompt/${encodeURIComponent(spec_id)}${use_llm ? "?use_llm=true" : ""}`
+    ),
+  auditPrompts: (project_type?: string) =>
+    request<{ project_type: string | null; prompts: Array<{ spec_id: string; filename: string; version: string; prompt: string }> }>(
+      `/api/v1/automation/audit-prompts${project_type ? `?project_type=${encodeURIComponent(project_type)}` : ""}`
+    ),
   improvementSuggestions: (body: { project_type: string; use_llm?: boolean }) =>
     request<{ suggestions: Array<{ spec_id: string; filename: string; suggestion: string; reason: string; priority: number }>; llm_notes?: string }>(
       "/api/v1/automation/improvement-suggestions",

@@ -319,6 +319,7 @@ The MCP server exposes these tools:
 - `list_project_types` — discover registry project types.
 - `get_specs` — fetch governed global + project-type + project-scoped specs.
 - `search_specs` — retrieve matching spec sections, including project-scoped matches, without loading everything.
+- `get_audit_prompt` — fetch a reverse-conformance audit prompt for a governed spec.
 - `report_spec_feedback` — file ambiguity, contradiction, or outdated-guidance feedback.
 
 Direct agent endpoints are also available:
@@ -632,6 +633,7 @@ POST /api/v1/spec-generation/preview    POST /api/v1/spec-generation/draft
 GET  /api/v1/automation/features        POST /api/v1/automation/task-plan
 POST /api/v1/automation/ticket          POST /api/v1/automation/section-classifier
 POST /api/v1/automation/context-budget  POST /api/v1/automation/audit-prompt
+GET  /api/v1/automation/audit-prompt/:specId   GET /api/v1/automation/audit-prompts
 POST /api/v1/automation/improvement-suggestions   POST /api/v1/automation/spec-pack
 GET  /api/v1/specs/:type/download[?channel=beta]   GET /api/v1/meta/public-key
 POST /api/v1/cli/stub-prompts           POST /api/v1/cli/sync-check

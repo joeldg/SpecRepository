@@ -798,6 +798,15 @@ describe("LLM spec automation", () => {
     expect(auditPrompt.statusCode).toBe(200);
     expect(auditPrompt.json().prompt).toContain("Audit an implementation");
 
+    const auditPromptGet = await getJson(`/api/v1/automation/audit-prompt/${spec.id}`);
+    expect(auditPromptGet).toMatchObject({ spec_id: spec.id, filename: "API.md" });
+    expect(auditPromptGet.prompt).toContain("Audit an implementation");
+
+    const auditPrompts = await getJson("/api/v1/automation/audit-prompts?project_type=Acme%20Edge%20Device");
+    expect(auditPrompts.prompts.find((prompt: any) => prompt.filename === "API.md")).toMatchObject({
+      spec_id: spec.id,
+    });
+
     const suggestions = await app.inject({
       method: "POST",
       url: "/api/v1/automation/improvement-suggestions",

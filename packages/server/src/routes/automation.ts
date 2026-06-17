@@ -73,6 +73,20 @@ function governedSpecs(app: FastifyInstance, projectTypeName: string): Automatio
   }));
 }
 
+async function buildAuditPrompt(app: FastifyInstance, spec: AutomationSpecInput, useLlm: boolean) {
+  let prompt = auditPromptForSpec(spec);
+  if (useLlm) {
+    requireFeature("llm_generation");
+    const llm = await runLlmText(app.db, {
+      system: "You improve reverse-conformance audit prompts. Output only the improved prompt.",
+      user: prompt,
+      maxTokens: 2500,
+    });
+    return { prompt: llm.text, model: llm.model, provider: llm.provider };
+  }
+  return { prompt, model: null, provider: null };
+}
+
 export async function automationRoutes(app: FastifyInstance): Promise<void> {
   app.get("/automation/features", async () => automationFlags());
 
@@ -236,17 +250,35 @@ export async function automationRoutes(app: FastifyInstance): Promise<void> {
     const specId = requireString(body, "spec_id");
     const spec = app.db.prepare("SELECT * FROM specs WHERE id = ?").get(specId) as AutomationSpecInput | undefined;
     if (!spec) throw new HttpError(404, `Unknown spec: ${specId}`);
-    let prompt = auditPromptForSpec(spec);
-    if (body.use_llm === true) {
-      requireFeature("llm_generation");
-      const llm = await runLlmText(app.db, {
-        system: "You improve reverse-conformance audit prompts. Output only the improved prompt.",
-        user: prompt,
-        maxTokens: 2500,
-      });
-      prompt = llm.text;
-    }
-    return { spec_id: spec.id, filename: spec.filename, prompt };
+    const result = await buildAuditPrompt(app, spec, body.use_llm === true);
+    return { spec_id: spec.id, filename: spec.filename, ...result };
+  });
+
+  app.get("/automation/audit-prompt/:specId", async (req) => {
+    requireFeature("audit_prompts");
+    const { specId } = req.params as { specId: string };
+    const { use_llm } = req.query as { use_llm?: string };
+    const spec = app.db.prepare("SELECT * FROM specs WHERE id = ?").get(specId) as AutomationSpecInput | undefined;
+    if (!spec) throw new HttpError(404, `Unknown spec: ${specId}`);
+    const result = await buildAuditPrompt(app, spec, use_llm === "true" || use_llm === "1");
+    return { spec_id: spec.id, filename: spec.filename, version: spec.current_version, ...result };
+  });
+
+  app.get("/automation/audit-prompts", async (req) => {
+    requireFeature("audit_prompts");
+    const { project_type } = req.query as { project_type?: string };
+    const specs = project_type
+      ? governedSpecs(app, project_type)
+      : (app.db.prepare("SELECT * FROM specs WHERE status = 'published' ORDER BY filename").all() as AutomationSpecInput[]);
+    return {
+      project_type: project_type ?? null,
+      prompts: specs.map((spec) => ({
+        spec_id: spec.id,
+        filename: spec.filename,
+        version: spec.current_version,
+        prompt: auditPromptForSpec(spec),
+      })),
+    };
   });
 
   app.post("/automation/improvement-suggestions", async (req) => {
