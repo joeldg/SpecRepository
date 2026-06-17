@@ -6,6 +6,7 @@ import { HttpError } from "../helpers.js";
 import { analyzeCompatibility } from "./compat.js";
 import { analyzeContradictions } from "./contradictions.js";
 import { lintContent } from "./lint.js";
+import { scoreRisk } from "./risk.js";
 
 export interface CreateChangeRequestInput {
   spec: Spec;
@@ -38,14 +39,15 @@ export function createChangeRequest(db: Db, input: CreateChangeRequestInput): Ch
   const compatibility = analyzeCompatibility(spec.content, proposedContent, versionDelta);
   const lint = lintContent(db, spec.filename, proposedContent);
   const contradictions = analyzeContradictions(db, spec, proposedContent);
+  const risk = scoreRisk({ filename: spec.filename, proposedContent, versionDelta, compatibility, lint, contradictions });
 
   const id = uuid();
   const ts = now();
   const submit = db.transaction(() => {
     db.prepare(
       `INSERT INTO change_requests
-         (id, spec_id, proposed_by, version_delta, diff, proposed_content, summary, status, compatibility, lint, contradictions, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`
+         (id, spec_id, proposed_by, version_delta, diff, proposed_content, summary, status, compatibility, lint, contradictions, risk, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`
     ).run(
       id,
       spec.id,
@@ -57,6 +59,7 @@ export function createChangeRequest(db: Db, input: CreateChangeRequestInput): Ch
       JSON.stringify(compatibility),
       lint ? JSON.stringify(lint) : null,
       JSON.stringify(contradictions),
+      JSON.stringify(risk),
       ts
     );
     db.prepare("UPDATE specs SET status = 'pending_review', updated_at = ? WHERE id = ?").run(ts, spec.id);

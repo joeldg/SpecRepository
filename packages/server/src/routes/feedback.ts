@@ -13,6 +13,17 @@ import { searchSpecs } from "../lib/search.js";
 import { splitSections } from "../lib/sections.js";
 import { bundleSpecs } from "../lib/compile.js";
 
+function feedbackClusterKey(row: Pick<AgentFeedback, "spec_id" | "error_type" | "description">): string {
+  const normalized = row.description
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length > 3)
+    .slice(0, 10)
+    .join(" ");
+  return `${row.spec_id}:${row.error_type}:${normalized}`;
+}
+
 export async function feedbackRoutes(app: FastifyInstance): Promise<void> {
   // Agent-facing onboarding guide: feed this markdown to an agent so it knows how
   // to configure and use the SpecRegistry MCP server in a codebase.
@@ -168,14 +179,7 @@ export async function feedbackRoutes(app: FastifyInstance): Promise<void> {
       .all(...(status ? [status] : [])) as Array<AgentFeedback & { filename: string; project_type_name: string }>;
     const clusters = new Map<string, Array<(typeof rows)[number]>>();
     for (const row of rows) {
-      const normalized = row.description
-        .toLowerCase()
-        .replace(/[^a-z0-9 ]+/g, " ")
-        .split(/\s+/)
-        .filter((word) => word.length > 3)
-        .slice(0, 10)
-        .join(" ");
-      const key = `${row.spec_id}:${row.error_type}:${normalized}`;
+      const key = feedbackClusterKey(row);
       clusters.set(key, [...(clusters.get(key) ?? []), row]);
     }
     return [...clusters.entries()]
@@ -195,6 +199,51 @@ export async function feedbackRoutes(app: FastifyInstance): Promise<void> {
         feedback_ids: items.map((item) => item.id),
       }))
       .sort((a, b) => b.count - a.count || b.latest_at.localeCompare(a.latest_at));
+  });
+
+  app.post("/ai/feedback/clusters/status", async (req) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const key = requireString(body, "key");
+    const status = requireOneOf(body, "status", ["open", "acknowledged", "resolved"] as const);
+    const rows = app.db.prepare("SELECT * FROM agent_feedback ORDER BY created_at DESC").all() as AgentFeedback[];
+    const ids = rows.filter((row) => feedbackClusterKey(row) === key).map((row) => row.id);
+    if (ids.length === 0) throw new HttpError(404, `Unknown feedback cluster: ${key}`);
+    const update = app.db.prepare("UPDATE agent_feedback SET status = ? WHERE id = ?");
+    const tx = app.db.transaction(() => {
+      for (const id of ids) update.run(status, id);
+    });
+    tx();
+    return { key, status, updated: ids.length, feedback_ids: ids };
+  });
+
+  app.post("/ai/feedback/clusters/draft-fix", async (req, reply) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const key = requireString(body, "key");
+    const rows = app.db.prepare("SELECT * FROM agent_feedback ORDER BY created_at DESC").all() as AgentFeedback[];
+    const items = rows.filter((row) => feedbackClusterKey(row) === key && row.status !== "resolved");
+    if (items.length === 0) throw new HttpError(404, `Unknown open feedback cluster: ${key}`);
+    const first = items[0];
+    const spec = requireSpec(app.db, first.spec_id);
+    if (spec.status === "pending_review") throw new HttpError(409, "Spec already has a pending change request; review it first");
+    const merged = {
+      ...first,
+      description: items.map((item, index) => `${index + 1}. ${item.description}`).join("\n"),
+    };
+    const revised = await draftFix(app.db, spec, merged);
+    const cr = createChangeRequest(app.db, {
+      spec,
+      proposedContent: revised,
+      versionDelta: first.error_type === "ambiguity" ? "patch" : "minor",
+      proposedBy: `cluster-draft (for ${items.length} feedback items)`,
+      summary: `AI-drafted fix for feedback cluster: ${first.description.slice(0, 100)}`,
+    });
+    const update = app.db.prepare("UPDATE agent_feedback SET status = 'acknowledged' WHERE id = ?");
+    const tx = app.db.transaction(() => {
+      for (const item of items) update.run(item.id);
+    });
+    tx();
+    reply.code(201);
+    return { ...cr, feedback_ids: items.map((item) => item.id) };
   });
 
   // Reverse conformance: does a codebase snapshot follow its governed specs?
@@ -236,6 +285,96 @@ export async function feedbackRoutes(app: FastifyInstance): Promise<void> {
       );
     reply.code(201);
     return app.db.prepare("SELECT * FROM efficacy_runs WHERE id = ?").get(id);
+  });
+
+  app.get("/ai/efficacy/trends", async (req) => {
+    const { spec_id } = req.query as { spec_id?: string };
+    const rows = app.db
+      .prepare(
+        `SELECT er.*, s.filename
+         FROM efficacy_runs er JOIN specs s ON s.id = er.spec_id
+         ${spec_id ? "WHERE er.spec_id = ?" : ""}
+         ORDER BY er.created_at ASC`
+      )
+      .all(...(spec_id ? [spec_id] : []));
+    return { spec_id: spec_id ?? null, runs: rows };
+  });
+
+  app.post("/ai/efficacy/scheduled-run", async (req) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const limit = Math.min(10, Math.max(1, Number(body.limit ?? 3) || 3));
+    const task = typeof body.task_prompt === "string" && body.task_prompt.trim()
+      ? body.task_prompt
+      : "Assess whether this specification provides enough actionable guidance for an implementation agent.";
+    const specs = app.db
+      .prepare(
+        `SELECT s.*
+         FROM specs s
+         LEFT JOIN agent_feedback af ON af.spec_id = s.id AND af.status = 'open'
+         WHERE s.status = 'published'
+         GROUP BY s.id
+         ORDER BY COUNT(af.id) DESC, s.updated_at ASC
+         LIMIT ?`
+      )
+      .all(limit) as Spec[];
+    const results = [];
+    for (const spec of specs) {
+      const result = await runEfficacy(app.db, spec.content, spec.filename, task);
+      const id = makeId();
+      app.db
+        .prepare(
+          `INSERT INTO efficacy_runs (id, spec_id, task_prompt, score_with, score_without, improved, rationale, model, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(id, spec.id, task, result.score_with, result.score_without, result.improved ? 1 : 0, result.rationale, result.model, now());
+      results.push(app.db.prepare("SELECT * FROM efficacy_runs WHERE id = ?").get(id));
+    }
+    return { requested: limit, ran: results.length, results };
+  });
+
+  app.post("/ai/regression-suite", async (req) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const spec = requireSpec(app.db, requireString(body, "spec_id"));
+    const prompts = Array.isArray(body.prompts)
+      ? (body.prompts as unknown[]).filter((prompt): prompt is string => typeof prompt === "string" && prompt.trim().length > 0).slice(0, 10)
+      : [requireString(body, "task_prompt")];
+    const results = [];
+    for (const prompt of prompts) {
+      const result = await runEfficacy(app.db, spec.content, spec.filename, prompt);
+      results.push({ prompt, ...result });
+    }
+    return { spec_id: spec.id, filename: spec.filename, model_count: 1, results };
+  });
+
+  app.get("/ai/token-roi", async () => {
+    const rows = app.db
+      .prepare(
+        `SELECT s.id, s.filename, s.current_version, LENGTH(s.content) AS chars, s.updated_at,
+                pt.name AS project_type_name,
+                COUNT(DISTINCT ue.id) AS usage_events,
+                COUNT(DISTINCT af.id) AS feedback_total,
+                COUNT(DISTINCT CASE WHEN af.status = 'open' THEN af.id END) AS open_feedback,
+                COUNT(DISTINCT er.id) AS efficacy_runs,
+                COUNT(DISTINCT CASE WHEN er.improved = 1 THEN er.id END) AS efficacy_improved,
+                AVG(er.score_with - er.score_without) AS avg_lift
+         FROM specs s
+         JOIN project_types pt ON pt.id = s.project_type_id
+         LEFT JOIN usage_events ue ON ue.project_type_id = s.project_type_id
+         LEFT JOIN agent_feedback af ON af.spec_id = s.id
+         LEFT JOIN efficacy_runs er ON er.spec_id = s.id
+         WHERE s.status = 'published'
+         GROUP BY s.id
+         ORDER BY usage_events DESC, open_feedback DESC, chars DESC`
+      )
+      .all() as Array<Record<string, unknown> & { chars: number; usage_events: number; open_feedback: number; efficacy_runs: number; efficacy_improved: number; avg_lift: number | null }>;
+    return {
+      specs: rows.map((row) => {
+        const approxTokens = Math.ceil(row.chars / 4);
+        const lift = Number(row.avg_lift ?? 0);
+        const roiScore = Math.round((Number(row.usage_events) * Math.max(1, lift + 1) + Number(row.efficacy_improved) * 5 - Number(row.open_feedback) * 3) / Math.max(1, approxTokens / 1000));
+        return { ...row, approx_tokens: approxTokens, avg_lift: lift, roi_score: roiScore };
+      }),
+    };
   });
 
   // Spec authors triage alerts: open -> acknowledged -> resolved.

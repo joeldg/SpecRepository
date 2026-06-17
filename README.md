@@ -521,17 +521,24 @@ Use the LDAP tester in Settings before switching users over.
 - **AI feedback loop** — agents read `GET /api/v1/ai/specs/:projectType` and report
   spec ambiguities/contradictions to `POST /api/v1/ai/feedback`, which appear as
   alerts on the dashboard and on the affected spec until triaged. Repeated complaints
-  are clustered by spec/type/text at `GET /api/v1/ai/feedback/clusters`. From any
-  feedback item, **Draft AI fix** sends the spec + complaint to the configured server LLM
-  and opens the revision as a normal
+  are clustered by spec/type/text at `GET /api/v1/ai/feedback/clusters`; clusters can be
+  acknowledged, resolved, or drafted as one change request. From any feedback item,
+  **Draft AI fix** sends the spec + complaint to the configured server LLM and opens the revision as a normal
   pending change request — the review workflow stays the safety gate.
 - **Templates & conformance lint** — per-filename templates define required sections;
   every change request is linted against them and new drafts scaffold from the
-  template body. Lint results and a heading-based **compatibility report** (removed
-  sections ⇒ major, added ⇒ minor) are stored on the change request and shown in review.
+  template body. Lint also checks for missing examples, missing non-goals, missing
+  operational sections, and ambiguity terms. Lint results and a heading-based
+  **compatibility report** (removed sections ⇒ major, added ⇒ minor) are stored on
+  the change request and shown in review.
 - **Contradiction checks** — change requests also store a deterministic cross-spec
   contradiction report. Proposed normative statements are compared with published global
   and project-type specs so reviewers can see possible conflicts before approval.
+- **Governance previews** — change requests carry a risk score for compatibility,
+  security/privacy sensitivity, contradictions, and lint failures. Review detail includes
+  a dry-run publish preview showing affected repos, generated agent files, webhooks, and
+  sync jobs before approval. Approval policies double as CODEOWNERS-style spec ownership
+  and are exposed through `GET /api/v1/spec-ownership`.
 - **Distribution** — `specreg check` gates CI on spec drift; repo subscriptions open
   GitHub PRs with updated specs on approval (configure a GitHub token in Settings or set `GITHUB_TOKEN`);
   webhooks (JSON or Slack format) fire on publish/review/feedback events.
@@ -546,6 +553,7 @@ Use the LDAP tester in Settings before switching users over.
 - **Granular reports** — the Reports page and `GET /api/v1/reports/overview` break SDD
   health down by global specs, project types, and individual projects, with scope mix,
   feedback mix, review risk, stale specs, efficacy outcomes, and project drift counts.
+  Reports also show dependency-map and token-ROI panels.
   The page also includes an AI reporting test bench for synthetic feedback plus audit
   and efficacy smoke tests against the configured LLM provider.
 - **Review SLA** — `GET /api/v1/reviews/sla` summarizes pending review age, warnings,
@@ -571,7 +579,8 @@ Use the LDAP tester in Settings before switching users over.
   reporting violations with spec/section/file citations. Checks adherence, not just spec currency.
 - **Spec efficacy testing** — `POST /api/v1/ai/efficacy` runs a task with and without
   the spec in context and grades both, measuring whether a spec actually changes agent
-  output ("earns its tokens" vs "no lift").
+  output ("earns its tokens" vs "no lift"). Trend, scheduled-run, prompt-regression,
+  and token-ROI endpoints provide the reporting surface for model/spec comparisons.
 - **Auth, roles & review routing** — local accounts (scrypt) or optional LDAP; roles
   (admin/reviewer/author/agent) gate approvals and settings; per-project-type required
   reviewers (CODEOWNERS-style). Approval policies can require multiple reviewers by
@@ -598,14 +607,19 @@ GET  /api/v1/specs/:id                  PUT  /api/v1/specs/:id          (drafts 
 POST /api/v1/specs/:id/publish          GET  /api/v1/specs/:type/download   (zip)
 POST /api/v1/specs/review               GET  /api/v1/reviews[?status=]
 GET  /api/v1/reviews/sla
+GET  /api/v1/reviews/:id/publish-preview
 POST /api/v1/reviews/:id/approve        POST /api/v1/reviews/:id/reject
 GET  /api/v1/ai/specs/:projectType      POST /api/v1/ai/feedback
 GET  /api/v1/ai/feedback[?status=]      POST /api/v1/ai/feedback/:id/status
 GET  /api/v1/ai/feedback/clusters       POST /api/v1/ai/feedback/:id/draft-fix
+POST /api/v1/ai/feedback/clusters/status   POST /api/v1/ai/feedback/clusters/draft-fix
 GET  /api/v1/ai/search?q=[&project_type=&repo=]  GET /api/v1/ai/mcp-guide/:type
 POST /api/v1/ai/audit                   POST /api/v1/ai/efficacy
+GET  /api/v1/ai/efficacy/trends         POST /api/v1/ai/efficacy/scheduled-run
+POST /api/v1/ai/regression-suite        GET /api/v1/ai/token-roi
 POST /api/v1/specs/:id/promote          GET  /api/v1/specs/:type/compile?target=
 GET  /api/v1/specs/:type/agent-pack     GET/POST/DELETE /api/v1/approval-policies
+GET  /api/v1/spec-ownership             GET /api/v1/specs/dependency-map
 GET  /api/v1/specs/:type/download[?channel=beta]   GET /api/v1/meta/public-key
 POST /api/v1/cli/stub-prompts           POST /api/v1/cli/sync-check
 GET/POST/PUT/DELETE /api/v1/templates   GET/POST/DELETE /api/v1/webhooks

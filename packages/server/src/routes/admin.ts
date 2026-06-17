@@ -173,6 +173,38 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     reply.code(204);
   });
 
+  app.get("/spec-ownership", async () => {
+    const policies = app.db
+      .prepare(
+        `SELECT ap.*, pt.name AS project_type_name
+         FROM approval_policies ap
+         LEFT JOIN project_types pt ON pt.id = ap.project_type_id
+         ORDER BY ap.project_type_id IS NULL ASC, LENGTH(ap.filename_glob) DESC, ap.created_at DESC`
+      )
+      .all() as Array<Record<string, unknown> & { id: string; project_type_id: string | null; filename_glob: string; required_reviewers: string }>;
+    const specs = app.db
+      .prepare(
+        `SELECT s.id, s.filename, s.project_type_id, pt.name AS project_type_name
+         FROM specs s JOIN project_types pt ON pt.id = s.project_type_id
+         ORDER BY pt.name, s.filename`
+      )
+      .all() as Array<{ id: string; filename: string; project_type_id: string; project_type_name: string }>;
+    const ownership = specs.map((spec) => {
+      const policy = policies.find(
+        (candidate) =>
+          (!candidate.project_type_id || candidate.project_type_id === spec.project_type_id) &&
+          (candidate.filename_glob === "*" ||
+            spec.filename.toLowerCase().startsWith(String(candidate.filename_glob).replace(/\*.*$/, "").toLowerCase()))
+      );
+      return {
+        ...spec,
+        policy_id: policy?.id ?? null,
+        owners: policy ? (JSON.parse(policy.required_reviewers) as string[]) : [],
+      };
+    });
+    return { policies, ownership };
+  });
+
   // --- Spec templates (conformance) ---
 
   app.get("/templates", async () => {

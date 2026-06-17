@@ -20,6 +20,7 @@ import { bundleSpecs, compileBundle, type CompileTarget } from "../lib/compile.j
 import { dispatchWebhooks, recordUsage } from "../lib/events.js";
 import { enqueueSyncJobs } from "../lib/github.js";
 import { lintContent } from "../lib/lint.js";
+import { dependencyMap } from "../lib/dependencies.js";
 import { reindexSpec } from "../lib/search.js";
 import { sha256, signManifest } from "../lib/sign.js";
 
@@ -54,6 +55,12 @@ export async function specRoutes(app: FastifyInstance): Promise<void> {
     return app.db
       .prepare(`${SUMMARY_SELECT} ORDER BY pt.scope = 'global' DESC, pt.name, s.filename`)
       .all();
+  });
+
+  app.get("/specs/dependency-map", async (req) => {
+    const { project_type_id, project_id } = req.query as { project_type_id?: string; project_id?: string };
+    if (project_id) requireProjectConsumer(app.db, project_id);
+    return dependencyMap(app.db, project_type_id, project_id);
   });
 
   // Zipped folder of the latest published specs for a project type (+ all global specs).

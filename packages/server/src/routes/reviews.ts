@@ -104,6 +104,44 @@ export async function reviewRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
+  app.get("/reviews/:id/publish-preview", async (req) => {
+    const { id } = req.params as { id: string };
+    const cr = requireChangeRequest(app, id);
+    const spec = requireSpec(app.db, cr.spec_id);
+    const pt = app.db.prepare("SELECT scope FROM project_types WHERE id = ?").get(spec.project_type_id) as
+      | { scope: string }
+      | undefined;
+    const affectedRepos =
+      pt?.scope === "global"
+        ? app.db.prepare("SELECT repo, branch, base_path FROM repo_subscriptions ORDER BY repo").all()
+        : app.db
+            .prepare("SELECT repo, branch, base_path FROM repo_subscriptions WHERE project_type_id = ? ORDER BY repo")
+            .all(spec.project_type_id);
+    const webhooks = app.db
+      .prepare(
+        `SELECT id, format, events FROM webhooks
+         WHERE active = 1 AND (events = '[]' OR events LIKE '%review.approved%' OR events LIKE '%spec.published%')`
+      )
+      .all();
+    return {
+      change_request_id: cr.id,
+      spec_id: spec.id,
+      filename: spec.filename,
+      status: cr.status,
+      resulting_stable_version: cr.resulting_version ?? null,
+      generated_agent_files: ["CLAUDE.md", "AGENTS.md", ".cursorrules", ".mcp.json", "SPECREGISTRY_MCP_SKILL.md"],
+      affected_repositories: affectedRepos,
+      sync_jobs_to_enqueue: affectedRepos.length,
+      webhooks_to_fire: webhooks,
+      checks: {
+        compatibility: cr.compatibility ? JSON.parse(cr.compatibility) : null,
+        lint: cr.lint ? JSON.parse(cr.lint) : null,
+        contradictions: cr.contradictions ? JSON.parse(cr.contradictions) : null,
+        risk: cr.risk ? JSON.parse(cr.risk) : null,
+      },
+    };
+  });
+
   // Approve: bump semver per the requested delta, publish new content, record the version.
   // channel="beta" records a prerelease version without touching the stable head.
   app.post("/reviews/:id/approve", async (req) => {

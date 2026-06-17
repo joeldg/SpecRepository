@@ -47,6 +47,15 @@ export type ReviewDetail = ChangeRequest & {
     required_reviewers: string[];
   };
 };
+export interface PublishPreview {
+  change_request_id: string;
+  filename: string;
+  sync_jobs_to_enqueue: number;
+  affected_repositories: Array<{ repo: string; branch: string; base_path: string }>;
+  generated_agent_files: string[];
+  webhooks_to_fire: Array<{ id: string; format: string; events: string }>;
+  checks: Record<string, unknown>;
+}
 export interface ReviewSlaSummary {
   warn_hours: number;
   breach_hours: number;
@@ -149,6 +158,11 @@ export interface ReportsOverview {
     efficacy_runs: number;
     efficacy_improved: number;
   }>;
+}
+export interface DependencyMap {
+  specs: Array<{ id: string; filename: string; project_type_name: string; project_name?: string | null }>;
+  edges: Array<{ from_spec_id: string; from_filename: string; to_spec_id: string | null; to_filename: string; relation: string }>;
+  unresolved: Array<{ from_filename: string; to_filename: string; relation: string }>;
 }
 export interface SearchHit {
   spec_id: string;
@@ -329,6 +343,7 @@ export const api = {
     request<ReviewRow[]>(`/api/v1/reviews${status ? `?status=${status}` : ""}`),
   reviewSla: () => request<ReviewSlaSummary>("/api/v1/reviews/sla"),
   review: (id: string) => request<ReviewDetail>(`/api/v1/reviews/${id}`),
+  publishPreview: (id: string) => request<PublishPreview>(`/api/v1/reviews/${id}/publish-preview`),
   approveReview: (id: string, reviewed_by: string, channel?: "stable" | "beta") =>
     request<ChangeRequest>(`/api/v1/reviews/${id}/approve`, {
       method: "POST",
@@ -341,6 +356,13 @@ export const api = {
     request<FeedbackRow[]>(`/api/v1/ai/feedback${status ? `?status=${status}` : ""}`),
   feedbackClusters: (status?: string) =>
     request<FeedbackCluster[]>(`/api/v1/ai/feedback/clusters${status ? `?status=${status}` : ""}`),
+  setFeedbackClusterStatus: (key: string, status: string) =>
+    request<{ key: string; status: string; updated: number }>("/api/v1/ai/feedback/clusters/status", {
+      method: "POST",
+      body: JSON.stringify({ key, status }),
+    }),
+  draftClusterFix: (key: string) =>
+    request<ChangeRequest>("/api/v1/ai/feedback/clusters/draft-fix", { method: "POST", body: JSON.stringify({ key }) }),
   createFeedback: (body: {
     spec_id: string;
     spec_version?: string;
@@ -386,6 +408,10 @@ export const api = {
 
   analytics: () => request<AnalyticsSummary>("/api/v1/analytics/summary"),
   reports: () => request<ReportsOverview>("/api/v1/reports/overview"),
+  dependencyMap: () => request<DependencyMap>("/api/v1/specs/dependency-map"),
+  tokenRoi: () => request<{ specs: Array<{ filename: string; approx_tokens: number; roi_score: number; open_feedback: number }> }>(
+    "/api/v1/ai/token-roi"
+  ),
   auditLog: (limit = 100) => request<AuditLogRow[]>(`/api/v1/audit-log?limit=${limit}`),
 
   login: (username: string, password: string) =>
@@ -455,6 +481,7 @@ export const api = {
     }),
   runEfficacy: (spec_id: string, task_prompt: string) =>
     request<EfficacyRun>("/api/v1/ai/efficacy", { method: "POST", body: JSON.stringify({ spec_id, task_prompt }) }),
+  efficacyTrends: () => request<{ runs: Array<EfficacyRun & { filename: string }> }>("/api/v1/ai/efficacy/trends"),
   runAudit: (body: { project_type: string; tree: string; files: Array<{ path: string; content: string }> }) =>
     request<{ project_type: string; findings: unknown[]; finding_count: number }>("/api/v1/ai/audit", {
       method: "POST",

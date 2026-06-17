@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS change_requests (
   compatibility TEXT,
   lint TEXT,
   contradictions TEXT,
+  risk TEXT,
   created_at TEXT NOT NULL
 );
 
@@ -346,6 +347,7 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
       PRAGMA foreign_keys = ON;
     `,
   },
+  { version: 12, sql: "ALTER TABLE change_requests ADD COLUMN risk TEXT" },
 ];
 
 export function createDb(path: string): Db {
@@ -357,6 +359,15 @@ export function createDb(path: string): Db {
     const specsColumns = db.prepare("PRAGMA table_info(specs)").all() as Array<{ name: string }>;
     if (!specsColumns.some((column) => column.name === "project_id")) {
       db.exec("ALTER TABLE specs ADD COLUMN project_id TEXT REFERENCES repo_consumers(id)");
+    }
+  }
+  const hasChangeRequests = Boolean(
+    db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'change_requests'").get()
+  );
+  if (hasChangeRequests) {
+    const changeColumns = db.prepare("PRAGMA table_info(change_requests)").all() as Array<{ name: string }>;
+    if (!changeColumns.some((column) => column.name === "risk")) {
+      db.exec("ALTER TABLE change_requests ADD COLUMN risk TEXT");
     }
   }
   const hasSettings = Boolean(

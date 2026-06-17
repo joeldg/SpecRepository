@@ -2,14 +2,11 @@
 
 ## Governance
 
-- Spec ownership with CODEOWNERS-style owners per project type and filename.
-- Dry-run publish preview showing affected repos, webhooks, generated agent files, and sync jobs.
-- Spec diff risk scoring for security-sensitive or compatibility-heavy changes.
+- No open items.
 
 ## Quality and Safety
 
-- Spec lint rules beyond headings: required examples, prohibited ambiguity terms, required non-goals, and required operational sections.
-- Spec dependency map showing references, overrides, and supersession.
+- No open items.
 
 ## Developer Workflow
 
@@ -25,11 +22,7 @@
 
 ## AI Feedback and Efficacy
 
-- Feedback cluster actions: acknowledge/resolve/draft-fix an entire cluster.
-- Scheduled efficacy runs for important specs.
-- Efficacy trend charts over model and spec versions.
-- Prompt regression suite comparing outputs across model versions.
-- Token ROI report combining spec size, usage frequency, efficacy lift, and stale risk.
+- No open items.
 
 ## Enterprise
 

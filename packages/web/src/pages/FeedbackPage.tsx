@@ -47,6 +47,28 @@ export default function FeedbackPage() {
     }
   }
 
+  async function setClusterStatus(key: string, status: string) {
+    try {
+      await api.setFeedbackClusterStatus(key, status);
+      reload();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  async function draftClusterFix(key: string) {
+    setError(undefined);
+    setDrafting(key);
+    try {
+      const cr = await api.draftClusterFix(key);
+      navigate(`/reviews/${cr.id}`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setDrafting(undefined);
+    }
+  }
+
   return (
     <>
       <div className="page-head">
@@ -71,18 +93,28 @@ export default function FeedbackPage() {
                 <th>Spec</th>
                 <th>Sample</th>
                 <th>Latest</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {clusters.slice(0, 8).map((c) => (
-                <tr key={c.key} className="click" onClick={() => navigate(`/specs/${c.spec_id}`)}>
+                <tr key={c.key}>
                   <td className="mono">{c.count}</td>
                   <td>
                     <StatusBadge status={c.error_type} />
                   </td>
-                  <td className="mono">{c.filename}</td>
+                  <td className="mono click" onClick={() => navigate(`/specs/${c.spec_id}`)}>{c.filename}</td>
                   <td className="feedback-desc dim">{c.sample_description}</td>
                   <td className="faint">{timeAgo(c.latest_at)}</td>
+                  <td>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <button disabled={drafting === c.key} onClick={() => draftClusterFix(c.key)}>
+                        {drafting === c.key ? "Drafting..." : "Draft fix"}
+                      </button>
+                      {filter === "open" && <button onClick={() => setClusterStatus(c.key, "acknowledged")}>Ack cluster</button>}
+                      {filter !== "resolved" && <button onClick={() => setClusterStatus(c.key, "resolved")}>Resolve cluster</button>}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

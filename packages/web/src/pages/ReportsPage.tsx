@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { SpecSummary } from "@specregistry/shared";
-import { api, getAuthor, type EfficacyRun, type ProjectTypeWithCount, type ReportsOverview } from "../api";
+import { api, getAuthor, type DependencyMap, type EfficacyRun, type ProjectTypeWithCount, type ReportsOverview } from "../api";
 import { StatusBadge, timeAgo } from "../components";
 
 type ChartDatum = { label: string; value: number; tone?: "accent" | "green" | "amber" | "red" };
@@ -81,6 +81,9 @@ export default function ReportsPage() {
   const [report, setReport] = useState<ReportsOverview>();
   const [specs, setSpecs] = useState<SpecSummary[]>([]);
   const [types, setTypes] = useState<ProjectTypeWithCount[]>([]);
+  const [dependencies, setDependencies] = useState<DependencyMap>();
+  const [tokenRoi, setTokenRoi] = useState<Array<{ filename: string; approx_tokens: number; roi_score: number; open_feedback: number }>>([]);
+  const [efficacyTrend, setEfficacyTrend] = useState<Array<EfficacyRun & { filename: string }>>([]);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [specId, setSpecId] = useState("");
@@ -93,11 +96,14 @@ export default function ReportsPage() {
 
   function reload() {
     setError(undefined);
-    Promise.all([api.reports(), api.specs(), api.projectTypes()])
-      .then(([nextReport, nextSpecs, nextTypes]) => {
+    Promise.all([api.reports(), api.specs(), api.projectTypes(), api.dependencyMap(), api.tokenRoi(), api.efficacyTrends()])
+      .then(([nextReport, nextSpecs, nextTypes, nextDependencies, nextTokenRoi, nextEfficacyTrend]) => {
         setReport(nextReport);
         setSpecs(nextSpecs);
         setTypes(nextTypes.filter((t) => t.scope === "project_type"));
+        setDependencies(nextDependencies);
+        setTokenRoi(nextTokenRoi.specs.slice(0, 8));
+        setEfficacyTrend(nextEfficacyTrend.runs.slice(-8));
         setSpecId((current) => current || nextSpecs.find((s) => s.status === "published")?.id || nextSpecs[0]?.id || "");
         setProjectType((current) => current || nextTypes.find((t) => t.scope === "project_type")?.name || "");
       })
@@ -234,6 +240,47 @@ export default function ReportsPage() {
               <h2>AI Feedback Mix</h2>
               <BarChart data={feedbackData} />
             </div>
+          </div>
+
+          <div className="report-grid">
+            <div className="section report-panel">
+              <h2>Dependency Map</h2>
+              <div className="cards" style={{ marginBottom: 12 }}>
+                <div className="card">
+                  <div className="metric">{dependencies?.edges.length ?? 0}</div>
+                  <div className="label">Spec links</div>
+                </div>
+                <div className={`card${dependencies?.unresolved.length ? " alert" : ""}`}>
+                  <div className="metric">{dependencies?.unresolved.length ?? 0}</div>
+                  <div className="label">Unresolved refs</div>
+                </div>
+              </div>
+              {(dependencies?.edges ?? []).slice(0, 8).map((edge) => (
+                <div key={`${edge.from_spec_id}-${edge.to_filename}-${edge.relation}`} className="dim">
+                  <span className="mono">{edge.from_filename}</span> {edge.relation.replace("_", " ")}{" "}
+                  <span className="mono">{edge.to_filename}</span>
+                </div>
+              ))}
+            </div>
+            <div className="section report-panel">
+              <h2>Token ROI</h2>
+              <BarChart data={tokenRoi.map((row) => ({ label: row.filename, value: Math.max(0, row.roi_score), tone: row.open_feedback ? "amber" : "green" }))} />
+            </div>
+          </div>
+
+          <div className="section report-panel">
+            <h2>Efficacy Trend</h2>
+            {efficacyTrend.length === 0 ? (
+              <div className="empty">No efficacy runs yet.</div>
+            ) : (
+              <BarChart
+                data={efficacyTrend.map((run) => ({
+                  label: `${run.filename} ${new Date(run.created_at).toLocaleDateString()}`,
+                  value: Math.max(0, run.score_with - run.score_without),
+                  tone: run.improved ? "green" : "amber",
+                }))}
+              />
+            )}
           </div>
 
           <div className="section">

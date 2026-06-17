@@ -600,3 +600,100 @@ describe("usage analytics", () => {
     expect(report.global_specs.length).toBeGreaterThan(0);
   });
 });
+
+describe("governance and quality reports", () => {
+  it("adds risk scoring and dry-run publish preview to change requests", async () => {
+    const spec = await findSpec("API.md", "Acme Edge Device");
+    const review = await app.inject({
+      method: "POST",
+      url: "/api/v1/specs/review",
+      payload: {
+        spec_id: spec.id,
+        proposed_content: `${spec.content}\n\n## Security\n\nTokens must be encrypted. TBD.\n`,
+        version_delta: "patch",
+        proposed_by: "risk-test",
+      },
+    });
+    expect(review.statusCode).toBe(201);
+    const cr = review.json();
+    expect(JSON.parse(cr.risk)).toMatchObject({ level: expect.any(String), score: expect.any(Number) });
+    expect(JSON.parse(cr.lint).ambiguity_terms.length).toBeGreaterThan(0);
+
+    const preview = await getJson(`/api/v1/reviews/${cr.id}/publish-preview`);
+    expect(preview).toMatchObject({
+      change_request_id: cr.id,
+      filename: "API.md",
+      sync_jobs_to_enqueue: expect.any(Number),
+    });
+    expect(preview.generated_agent_files).toContain("AGENTS.md");
+    expect(preview.checks.risk.score).toBeGreaterThan(0);
+  });
+
+  it("exposes CODEOWNERS-style ownership and a dependency map", async () => {
+    const types = await getJson("/api/v1/project-types");
+    const edge = types.find((t: any) => t.name === "Acme Edge Device");
+    const policy = await app.inject({
+      method: "POST",
+      url: "/api/v1/approval-policies",
+      payload: { project_type_id: edge.id, filename_glob: "API.md", min_approvals: 1, required_reviewers: ["api-owner"] },
+    });
+    expect(policy.statusCode).toBe(201);
+
+    const ownership = await getJson("/api/v1/spec-ownership");
+    expect(ownership.ownership.find((row: any) => row.filename === "API.md" && row.project_type_name === "Acme Edge Device")).toMatchObject({
+      owners: ["api-owner"],
+    });
+
+    const depSpec = await app.inject({
+      method: "POST",
+      url: "/api/v1/specs",
+      payload: {
+        project_type_id: edge.id,
+        filename: "DEPENDENCY_TEST.md",
+        content: "# Dependency Test\n\nThis spec references API.md and depends on DESIGN.md.\n",
+        updated_by: "dep-test",
+      },
+    });
+    expect(depSpec.statusCode).toBe(201);
+    await app.inject({ method: "POST", url: `/api/v1/specs/${depSpec.json().id}/publish`, payload: { published_by: "dep-test" } });
+    const map = await getJson("/api/v1/specs/dependency-map");
+    expect(map.edges).toEqual(expect.arrayContaining([expect.objectContaining({ from_filename: "DEPENDENCY_TEST.md", to_filename: "API.md" })]));
+  });
+});
+
+describe("AI feedback governance", () => {
+  it("supports cluster status actions and token ROI/trend reports", async () => {
+    const spec = await findSpec("API.md", "Acme Edge Device");
+    for (const agent of ["agent-a", "agent-b"]) {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/v1/ai/feedback",
+        payload: {
+          spec_id: spec.id,
+          spec_version: spec.current_version,
+          agent_identifier: agent,
+          error_type: "ambiguity",
+          description: "Authentication timeout guidance is ambiguous",
+        },
+      });
+      expect(res.statusCode).toBe(201);
+    }
+    const clusters = await getJson("/api/v1/ai/feedback/clusters?status=open");
+    const cluster = clusters.find((row: any) => row.count === 2);
+    expect(cluster).toBeTruthy();
+
+    const updated = await app.inject({
+      method: "POST",
+      url: "/api/v1/ai/feedback/clusters/status",
+      payload: { key: cluster.key, status: "acknowledged" },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json()).toMatchObject({ updated: 2, status: "acknowledged" });
+
+    const roi = await getJson("/api/v1/ai/token-roi");
+    expect(roi.specs.find((row: any) => row.filename === "API.md")).toMatchObject({ approx_tokens: expect.any(Number) });
+
+    const trends = await getJson("/api/v1/ai/efficacy/trends");
+    expect(trends.runs).toEqual([]);
+  });
+});

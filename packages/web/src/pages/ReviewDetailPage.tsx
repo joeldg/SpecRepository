@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, getAuthor, type ReviewDetail } from "../api";
+import { api, getAuthor, type PublishPreview, type ReviewDetail } from "../api";
 import { DiffView, StatusBadge, timeAgo } from "../components";
 
 interface CompatReport {
@@ -32,6 +32,12 @@ interface ContradictionReport {
   }>;
 }
 
+interface RiskReport {
+  score: number;
+  level: string;
+  factors: string[];
+}
+
 function parseJson<T>(value: unknown): T | null {
   if (typeof value !== "string" || !value) return null;
   try {
@@ -44,6 +50,7 @@ function parseJson<T>(value: unknown): T | null {
 export default function ReviewDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [review, setReview] = useState<ReviewDetail>();
+  const [preview, setPreview] = useState<PublishPreview>();
   const [error, setError] = useState<string>();
   const [approvalChannel, setApprovalChannel] = useState<"stable" | "beta">("stable");
 
@@ -56,6 +63,10 @@ export default function ReviewDetailPage() {
   }, [id]);
 
   useEffect(reload, [reload]);
+  useEffect(() => {
+    if (!id) return;
+    api.publishPreview(id).then(setPreview).catch(() => setPreview(undefined));
+  }, [id]);
 
   if (!review) {
     return error ? <div className="error-banner">{error}</div> : <p className="dim">Loading…</p>;
@@ -153,11 +164,21 @@ export default function ReviewDetailPage() {
         const compat = parseJson<CompatReport>((review as unknown as Record<string, unknown>).compatibility);
         const lint = parseJson<LintReport>((review as unknown as Record<string, unknown>).lint);
         const contradictions = parseJson<ContradictionReport>((review as unknown as Record<string, unknown>).contradictions);
-        if (!compat && !lint && !contradictions) return null;
+        const risk = parseJson<RiskReport>((review as unknown as Record<string, unknown>).risk);
+        if (!compat && !lint && !contradictions && !risk) return null;
         return (
           <div className="section">
             <h2>Automated checks</h2>
             <div className="cards">
+              {risk && (
+                <div className={`card${risk.level === "high" || risk.level === "critical" ? " alert" : ""}`}>
+                  <div className="label">Risk score</div>
+                  <div>
+                    <span className="mono">{risk.score}/100</span> <StatusBadge status={risk.level} />
+                  </div>
+                  {risk.factors.length > 0 && <div className="dim">{risk.factors.join(" · ")}</div>}
+                </div>
+              )}
               {compat && (
                 <div className={`card${compat.agrees_with_requested ? "" : " alert"}`}>
                   <div className="label">Compatibility</div>
@@ -226,6 +247,33 @@ export default function ReviewDetailPage() {
       })()}
 
       {review.status === "pending" && (
+        <>
+        {preview && (
+          <div className="section">
+            <h2>Dry-run publish preview</h2>
+            <div className="cards">
+              <div className="card">
+                <div className="label">Affected repos</div>
+                <div className="mono">{preview.affected_repositories.length}</div>
+                {preview.affected_repositories.slice(0, 4).map((repo) => (
+                  <div key={`${repo.repo}-${repo.branch}`} className="dim">{repo.repo}@{repo.branch}</div>
+                ))}
+              </div>
+              <div className="card">
+                <div className="label">Sync jobs</div>
+                <div className="mono">{preview.sync_jobs_to_enqueue}</div>
+              </div>
+              <div className="card">
+                <div className="label">Webhooks</div>
+                <div className="mono">{preview.webhooks_to_fire.length}</div>
+              </div>
+              <div className="card">
+                <div className="label">Generated agent files</div>
+                <div className="dim">{preview.generated_agent_files.join(", ")}</div>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="toolbar">
           <select value={approvalChannel} onChange={(e) => setApprovalChannel(e.target.value as "stable" | "beta")}>
             <option value="stable">stable</option>
@@ -239,6 +287,7 @@ export default function ReviewDetailPage() {
           </button>
           <span className="faint">Acting as {getAuthor()}</span>
         </div>
+        </>
       )}
 
       <div className="section">

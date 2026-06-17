@@ -70,6 +70,8 @@ export interface ChangeRequest {
   lint?: string | null;
   /** JSON contradiction report captured at submission time */
   contradictions?: string | null;
+  /** JSON risk score captured at submission time */
+  risk?: string | null;
   created_at: string;
 }
 
