@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import AdmZip from "adm-zip";
 import { registryToken, selectProjectType, withRegistryAuth } from "./registry.js";
 import { repoIdentity, reportManifest, type Manifest } from "./repo.js";
+import { installGoogleStyleGuides, type InstalledStyleGuide } from "./styleguides.js";
 
 export interface InitOptions {
   server: string;
@@ -11,6 +12,8 @@ export interface InitOptions {
   type?: string;
   dir: string;
   force?: boolean;
+  styleguides?: string;
+  styleguideDir: string;
 }
 
 export async function runInit(opts: InitOptions): Promise<void> {
@@ -48,8 +51,19 @@ export async function runInit(opts: InitOptions): Promise<void> {
   }
   console.log(`\nManifest saved as ${opts.dir}/.specregistry.json (records versions for future syncs).`);
 
+  let styleGuides: InstalledStyleGuide[] = [];
+  try {
+    styleGuides = await installGoogleStyleGuides({
+      selection: opts.styleguides,
+      dir: opts.styleguideDir,
+      force: opts.force,
+    });
+  } catch (err) {
+    console.log(`Could not install Google style guides: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   writeMcpConfig(opts.server, projectType.name, identity.repo, registryToken(opts.token));
-  writeRegistryGuide(opts.server, projectType.name, identity.repo, opts.dir, registryToken(opts.token));
+  writeRegistryGuide(opts.server, projectType.name, identity.repo, opts.dir, registryToken(opts.token), styleGuides, opts.styleguideDir);
   try {
     const reported = await reportManifest(opts.server, opts.token, nextManifest, opts.dir, "init");
     console.log("Reported local spec manifest to the registry.");
@@ -121,7 +135,15 @@ function writeMcpConfig(server: string, projectType: string, repo: string, token
   console.log("Wrote .mcp.json — AI agents in this repo can now read specs and file feedback via MCP.");
 }
 
-function writeRegistryGuide(server: string, projectType: string, repo: string, specDir: string, token?: string): void {
+function writeRegistryGuide(
+  server: string,
+  projectType: string,
+  repo: string,
+  specDir: string,
+  token?: string,
+  styleGuides: InstalledStyleGuide[] = [],
+  styleguideDir = ".spec/styleguides"
+): void {
   const guidePath = path.resolve(process.cwd(), "SPECREGISTRY.md");
   if (fs.existsSync(guidePath)) {
     console.log("SPECREGISTRY.md already exists; not overwriting.");
@@ -140,10 +162,23 @@ This repository is governed by SpecRegistry.
 - Project/repo: ${repo}
 - Governed specs directory: ${specDir}/
 - Manifest: ${specDir}/.specregistry.json
+${styleGuides.length > 0 ? `- External style guide directory: ${styleguideDir}/\n- External style guide manifest: ${styleguideDir}/google-styleguides.json\n` : ""}
 
 Before changing code, load the global and project-type specifications listed in the manifest.
 Treat these as the approved source of truth. Generated repo-specific drafts belong outside
 the governed specs directory until they are submitted through the registry review workflow.
+${styleGuides.length > 0 ? `
+## External Style Guides
+
+The following Google style guides were selected during \`specreg init\` and converted to
+Markdown for local agent context. They are advisory process inputs, not registry-governed
+spec versions:
+
+${styleGuides.map((guide) => `- ${guide.title}: \`${guide.path}\``).join("\n")}
+
+Use these guides when editing matching code or documentation, but report conflicts through
+SpecRegistry feedback instead of silently overriding governed specs.
+` : ""}
 
 ## MCP
 

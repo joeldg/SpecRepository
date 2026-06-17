@@ -228,9 +228,28 @@ That writes:
 
 - `specs/*.md` — governed global + project-type specs.
 - `specs/.specregistry.json` — versions, hashes, and bundle signature metadata.
+- `.spec/styleguides/*.md` — selected Google style guides converted to Markdown.
+- `.spec/styleguides/google-styleguides.json` — fetched guide manifest with source URLs.
 - `.mcp.json` — MCP server config for AI agents in that repository.
 - `SPECREGISTRY.md` — root-level guidance that tells humans and agents which manifest,
   specs directory, registry URL, project type, and MCP flow govern the repository.
+
+During `specreg init`, the CLI scans the repository and suggests Google style guides from
+[google.github.io/styleguide](https://google.github.io/styleguide/) for detected languages,
+plus the documentation guide from `/docguide`. Press Enter to accept the suggested
+multi-select, choose comma-separated numbers/IDs, or use flags for automation:
+
+```sh
+specreg init --styleguides suggested
+specreg init --styleguides typescript,html-css,docguide
+specreg init --styleguides none
+specreg init --styleguides all --styleguide-dir docs/google-styleguides --force
+```
+
+These Google guides are advisory external process inputs, not governed registry specs.
+They are kept outside `specs/` so `specreg check` and `specreg sync` continue to verify only
+the approved registry bundle. Re-run `specreg init --styleguides suggested --force` to
+refresh the fetched copies.
 
 `specreg init` and `specreg sync` protect governed files: if a local spec has been edited
 or was not previously managed by the manifest, the CLI refuses to overwrite it unless

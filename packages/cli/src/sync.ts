@@ -66,7 +66,14 @@ export async function runSync(opts: SyncOptions): Promise<void> {
 
   console.log("\nDrift detected — pulling latest approved specs...");
   const compileTargets = savedCompileTargets(opts.dir);
-  await runInit({ server: opts.server, token: opts.token, type: manifest.project_type, dir: opts.dir });
+  await runInit({
+    server: opts.server,
+    token: opts.token,
+    type: manifest.project_type,
+    dir: opts.dir,
+    styleguides: "none",
+    styleguideDir: ".spec/styleguides",
+  });
   await runVerify({ server: opts.server, token: opts.token, dir: opts.dir, quiet: false });
   for (const target of compileTargets) {
     await runCompile({

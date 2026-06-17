@@ -25,6 +25,8 @@ Options:
   --token <token>   Registry Bearer/API token (default: $SPECREG_TOKEN)
   --type <name>     Project type name (skips the interactive prompt)
   --dir <path>      Spec directory (default: specs; generate --write default: .spec/drafts)
+  --styleguides <s> init: suggested | all | none | comma ids (default: interactive/suggested)
+  --styleguide-dir <path> init: local Google guide directory (default: .spec/styleguides)
   --out <path>      generate: prompt output directory (default: .spec/prompts)
   --target <t>      compile: claude | agents | cursor (default: claude)
   --author <name>   submit-drafts: author/proposer name (default: $USER or cli)
@@ -83,6 +85,8 @@ try {
       type: typeof flags.type === "string" ? flags.type : undefined,
       dir: typeof flags.dir === "string" ? flags.dir : "specs",
       force: flags.force === true,
+      styleguides: typeof flags.styleguides === "string" ? flags.styleguides : undefined,
+      styleguideDir: typeof flags["styleguide-dir"] === "string" ? flags["styleguide-dir"] : ".spec/styleguides",
     });
   } else if (command === "generate") {
     await runGenerate({

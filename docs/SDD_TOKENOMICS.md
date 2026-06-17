@@ -50,6 +50,11 @@ Every governed repository should follow this workflow.
 1. **Initialize**
    Run `specreg init` for the correct project type. This pulls approved specs, writes `specs/.specregistry.json`, and creates MCP configuration when possible.
    For auth-required registries, pass `--token <token>` or set `SPECREG_TOKEN`; `specreg init` carries that token into the generated MCP configuration.
+   Init also scans the repository and offers a suggested multi-select of Google style
+   guides from `https://google.github.io/styleguide/`, including `/docguide` for
+   documentation work. These guides are converted to Markdown under `.spec/styleguides/`
+   as advisory external context, while the registry manifest remains the governed source
+   of truth.
 
 2. **Load Agent Context**
    Agents should use the SpecRegistry MCP server and call `get_specs` before code changes. In a concrete repository, configure `SPECREG_REPO` so the agent receives the repo's project-scoped specs in addition to global and project-type specs. If an agent cannot use MCP, provide the generated `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, or the full agent pack from `GET /api/v1/specs/:type/agent-pack`.
