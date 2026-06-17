@@ -1,10 +1,12 @@
 # SpecRegistry
 
-Centralized management, versioning, and distribution of Markdown project specification
-files (`DESIGN.md`, `STRUCTURE.md`, `API.md`, …) — "Avro for human and AI-readable text."
-Humans manage specs through a web dashboard with a review workflow; developers pull
-approved specs with the `specreg` CLI; AI agents read specs and report ambiguities
-through a dedicated feedback endpoint.
+SpecRegistry turns your project specifications into an AI-ready control plane. Instead of
+hoping every agent, editor, prompt, and teammate remembers the same architecture rules,
+SpecRegistry gives your specs versioning, review gates, signed distribution, MCP access,
+drift checks, feedback loops, and observability. If you are building with AI, this is the
+missing layer that keeps generated work aligned with what you actually intended: approved
+Markdown specs (`DESIGN.md`, `STRUCTURE.md`, `API.md`, and more) become governed context
+that humans can review, developers can sync, and agents can load before they touch code.
 
 The full product specification lives in [docs/SPEC.md](docs/SPEC.md). The operating model
 for Spec Driven Development, observability, and token economics lives in
