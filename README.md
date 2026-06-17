@@ -399,6 +399,9 @@ The MCP server exposes these tools:
 - `get_audit_prompt` — fetch a reverse-conformance audit prompt for a governed spec.
 - `report_spec_feedback` — file ambiguity, contradiction, or outdated-guidance feedback.
 
+For the full agent feedback loop, including compiled files, MCP tool usage, dashboard
+triage, draft fixes, and release/sync behavior, see [README-AGENTS.md](README-AGENTS.md).
+
 Direct agent endpoints are also available:
 
 ```sh
@@ -897,6 +900,7 @@ no model provider is configured.
 
 ### Further reading
 
+- [Agent feedback workflow](README-AGENTS.md)
 - [Google style guide integration](README-GOOGLE-STYLEGUIDES.md)
 - [Product specification](docs/SPEC.md)
 - [SDD and tokenomics operating model](docs/SDD_TOKENOMICS.md)
