@@ -23,6 +23,8 @@
 
 ## Developer Workflow
 
+- [x] Project-local Google style guide onboarding during `specreg init`, with suggested
+  multi-select, converted Markdown copies, and agent-discoverable guide manifests.
 - GitHub App integration instead of raw `GITHUB_TOKEN`.
 - Official `specreg check` GitHub Action with PR comments.
 - Generated spec update PR summaries and changelogs.

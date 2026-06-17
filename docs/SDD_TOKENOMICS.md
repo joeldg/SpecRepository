@@ -54,7 +54,8 @@ Every governed repository should follow this workflow.
    guides from `https://google.github.io/styleguide/`, including `/docguide` for
    documentation work. These guides are converted to Markdown under `.spec/styleguides/`
    as advisory external context, while the registry manifest remains the governed source
-   of truth.
+   of truth. See `README-GOOGLE-STYLEGUIDES.md` for the catalog, selection rules, and
+   conflict semantics.
 
 2. **Load Agent Context**
    Agents should use the SpecRegistry MCP server and call `get_specs` before code changes. In a concrete repository, configure `SPECREG_REPO` so the agent receives the repo's project-scoped specs in addition to global and project-type specs. If an agent cannot use MCP, provide the generated `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, or the full agent pack from `GET /api/v1/specs/:type/agent-pack`.

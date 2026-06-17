@@ -249,7 +249,8 @@ specreg init --styleguides all --styleguide-dir docs/google-styleguides --force
 These Google guides are advisory external process inputs, not governed registry specs.
 They are kept outside `specs/` so `specreg check` and `specreg sync` continue to verify only
 the approved registry bundle. Re-run `specreg init --styleguides suggested --force` to
-refresh the fetched copies.
+refresh the fetched copies. See [README-GOOGLE-STYLEGUIDES.md](README-GOOGLE-STYLEGUIDES.md)
+for the guide catalog, selection rules, and SDD semantics.
 
 `specreg init` and `specreg sync` protect governed files: if a local spec has been edited
 or was not previously managed by the manifest, the CLI refuses to overwrite it unless
@@ -841,6 +842,7 @@ no model provider is configured.
 
 ### Further reading
 
+- [Google style guide integration](README-GOOGLE-STYLEGUIDES.md)
 - [Product specification](docs/SPEC.md)
 - [SDD and tokenomics operating model](docs/SDD_TOKENOMICS.md)
 - [Add-on backlog](docs/TODO.md)
