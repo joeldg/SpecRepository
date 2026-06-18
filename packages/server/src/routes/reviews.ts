@@ -9,6 +9,7 @@ import { dispatchWebhooks } from "../lib/events.js";
 import { enqueueSyncJobs, processSyncJobs } from "../lib/github.js";
 import { reindexSpec } from "../lib/search.js";
 import { getAppKeyConfig } from "../lib/appKeys.js";
+import { reviewImpact } from "../lib/reviewImpact.js";
 
 function requireChangeRequest(app: FastifyInstance, id: string): ChangeRequest {
   const cr = app.db.prepare("SELECT * FROM change_requests WHERE id = ?").get(id) as
@@ -133,6 +134,7 @@ export async function reviewRoutes(app: FastifyInstance): Promise<void> {
       affected_repositories: affectedRepos,
       sync_jobs_to_enqueue: affectedRepos.length,
       webhooks_to_fire: webhooks,
+      impact: reviewImpact(app.db, spec, cr.version_delta),
       checks: {
         compatibility: cr.compatibility ? JSON.parse(cr.compatibility) : null,
         lint: cr.lint ? JSON.parse(cr.lint) : null,

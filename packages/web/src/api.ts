@@ -54,7 +54,36 @@ export interface PublishPreview {
   affected_repositories: Array<{ repo: string; branch: string; base_path: string }>;
   generated_agent_files: string[];
   webhooks_to_fire: Array<{ id: string; format: string; events: string }>;
+  impact?: {
+    scope: "global" | "project_type" | "project";
+    level: "low" | "medium" | "high" | "critical";
+    score: number;
+    summary: string;
+    affected_project_types: Array<{ id: string; name: string; scope: string }>;
+    manifest_consumers: Array<{ id: string; repo: string; branch: string | null; commit_sha: string | null; manifest_path: string; last_seen_at: string }>;
+    repo_subscriptions: Array<{ repo: string; branch: string; base_path: string }>;
+    dependent_specs: Array<{ spec_id: string; filename: string; relation: string }>;
+    feedback: { total: number; open: number };
+    pending_reviews: number;
+    recent_usage: Record<string, number>;
+  };
   checks: Record<string, unknown>;
+}
+export interface ManifestDiagnostics {
+  project_type: string;
+  project_type_id: string;
+  project_id: string | null;
+  project: string | null;
+  up_to_date: string[];
+  outdated: Array<{ filename: string; local_version: string; latest_version: string; severity: string; within_pin: boolean }>;
+  missing_locally: Array<{ filename: string; latest_version: string }>;
+  not_on_server: string[];
+  drift: boolean;
+  local_count: number;
+  latest_count: number;
+  latest_specs: Array<{ filename: string; latest_version: string; scope: string; project_type: string }>;
+  local_only_count: number;
+  breaking_count: number;
 }
 export interface ReviewSlaSummary {
   warn_hours: number;
@@ -465,6 +494,8 @@ export const api = {
 
   analytics: () => request<AnalyticsSummary>("/api/v1/analytics/summary"),
   reports: () => request<ReportsOverview>("/api/v1/reports/overview"),
+  manifestDiagnostics: (body: { manifest?: unknown; project_type?: string; repo?: string; project_id?: string }) =>
+    request<ManifestDiagnostics>("/api/v1/cli/manifest-diagnostics", { method: "POST", body: JSON.stringify(body) }),
   dependencyMap: () => request<DependencyMap>("/api/v1/specs/dependency-map"),
   tokenRoi: () => request<{ specs: Array<{ filename: string; approx_tokens: number; roi_score: number; open_feedback: number }> }>(
     "/api/v1/ai/token-roi"

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { SpecSummary } from "@specregistry/shared";
-import { api, getAuthor, type DependencyMap, type EfficacyRun, type ProjectTypeWithCount, type ReportsOverview } from "../api";
+import { api, getAuthor, type DependencyMap, type EfficacyRun, type ManifestDiagnostics, type ProjectTypeWithCount, type ReportsOverview } from "../api";
 import { StatusBadge, timeAgo } from "../components";
 
 type ChartDatum = { label: string; value: number; tone?: "accent" | "green" | "amber" | "red" };
@@ -92,6 +92,9 @@ export default function ReportsPage() {
   const [feedbackText, setFeedbackText] = useState("Synthetic report test: verify this AI feedback appears in reports.");
   const [auditResult, setAuditResult] = useState<string>();
   const [efficacyResult, setEfficacyResult] = useState<EfficacyRun>();
+  const [manifestText, setManifestText] = useState("");
+  const [manifestRepo, setManifestRepo] = useState("");
+  const [manifestResult, setManifestResult] = useState<ManifestDiagnostics>();
   const [busy, setBusy] = useState<string>();
 
   function reload() {
@@ -184,6 +187,21 @@ export default function ReportsPage() {
       const result = await api.runEfficacy(specId, "Explain how an implementation should follow this spec in one paragraph.");
       setEfficacyResult(result);
       reload();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
+  async function diagnoseManifest() {
+    setBusy("manifest");
+    setError(undefined);
+    setManifestResult(undefined);
+    try {
+      const manifest = JSON.parse(manifestText);
+      const result = await api.manifestDiagnostics({ manifest, repo: manifestRepo || undefined });
+      setManifestResult(result);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -350,6 +368,86 @@ export default function ReportsPage() {
                   ))}
                 </tbody>
               </table>
+            )}
+          </div>
+
+          <div className="section report-panel">
+            <h2>Manifest Drift Diagnostics</h2>
+            <div className="form-row">
+              <input
+                value={manifestRepo}
+                onChange={(e) => setManifestRepo(e.target.value)}
+                placeholder="Optional repo override, e.g. github.com/org/repo"
+              />
+              <button className="primary" disabled={!manifestText.trim() || busy === "manifest"} onClick={diagnoseManifest}>
+                {busy === "manifest" ? "Checking..." : "Check manifest"}
+              </button>
+            </div>
+            <textarea
+              value={manifestText}
+              onChange={(e) => setManifestText(e.target.value)}
+              rows={8}
+              placeholder="Paste specs/.specregistry.json"
+              style={{ marginTop: 10 }}
+            />
+            {manifestResult && (
+              <>
+                <div className="cards" style={{ marginTop: 12 }}>
+                  <div className={`card${manifestResult.drift ? " alert" : ""}`}>
+                    <div className="label">Drift</div>
+                    <div><StatusBadge status={manifestResult.drift ? "pending" : "approved"} /> {manifestResult.project_type}</div>
+                    <div className="dim">{manifestResult.project ?? "No project repo supplied"}</div>
+                  </div>
+                  <div className="card">
+                    <div className="label">Up to date</div>
+                    <div className="mono">{manifestResult.up_to_date.length}/{manifestResult.latest_count}</div>
+                  </div>
+                  <div className={`card${manifestResult.breaking_count ? " alert" : ""}`}>
+                    <div className="label">Breaking drift</div>
+                    <div className="mono">{manifestResult.breaking_count}</div>
+                  </div>
+                  <div className="card">
+                    <div className="label">Local only</div>
+                    <div className="mono">{manifestResult.local_only_count}</div>
+                  </div>
+                </div>
+                <table className="grid" style={{ marginTop: 12 }}>
+                  <thead>
+                    <tr>
+                      <th>Spec</th>
+                      <th>Local</th>
+                      <th>Registry</th>
+                      <th>Severity</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {manifestResult.outdated.map((row) => (
+                      <tr key={row.filename}>
+                        <td className="mono">{row.filename}</td>
+                        <td className="mono">{row.local_version}</td>
+                        <td className="mono">{row.latest_version}</td>
+                        <td><StatusBadge status={row.severity} /> {!row.within_pin && <span className="badge rejected">outside pin</span>}</td>
+                      </tr>
+                    ))}
+                    {manifestResult.missing_locally.map((row) => (
+                      <tr key={row.filename}>
+                        <td className="mono">{row.filename}</td>
+                        <td className="faint">missing</td>
+                        <td className="mono">{row.latest_version}</td>
+                        <td><StatusBadge status="pending" /></td>
+                      </tr>
+                    ))}
+                    {manifestResult.not_on_server.map((filename) => (
+                      <tr key={filename}>
+                        <td className="mono">{filename}</td>
+                        <td className="faint">local</td>
+                        <td className="faint">not governed</td>
+                        <td><StatusBadge status="draft" /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
             )}
           </div>
 

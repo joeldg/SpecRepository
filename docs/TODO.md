@@ -15,7 +15,8 @@
 
 ## Governance
 
-- No open items.
+- [x] Spec impact analysis before approval/publish, including affected manifest consumers,
+  repo subscriptions, downstream spec references, feedback, recent usage, and risk level.
 
 ## Quality and Safety
 
@@ -25,15 +26,18 @@
 
 - [x] Project-local Google style guide onboarding during `specreg init`, with suggested
   multi-select, converted Markdown copies, and agent-discoverable guide manifests.
+- [x] Official `specreg check` GitHub Action with optional PR comments.
+- [x] Dashboard drift diagnostics from an uploaded or pasted `.specregistry.json`.
 - GitHub App integration instead of raw `GITHUB_TOKEN`.
-- Official `specreg check` GitHub Action with PR comments.
 - Generated spec update PR summaries and changelogs.
-- Dashboard drift diagnostics from an uploaded or pasted `.specregistry.json`.
+- Spec change migration checklist generation for downstream projects.
 
 ## Search and Discovery
 
 - Semantic search alongside FTS5.
 - Saved searches for common policy areas such as auth, PII, deployment, and observability.
+- Spec impact explorer for browsing dependencies, consumers, recent usage, and drift outside
+  the review flow.
 
 ## AI Feedback and Efficacy
 

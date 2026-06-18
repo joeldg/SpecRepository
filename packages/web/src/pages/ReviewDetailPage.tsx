@@ -272,6 +272,42 @@ export default function ReviewDetailPage() {
                 <div className="dim">{preview.generated_agent_files.join(", ")}</div>
               </div>
             </div>
+            {preview.impact && (
+              <div className="section" style={{ marginTop: 12 }}>
+                <h2>Impact analysis</h2>
+                <div className="cards">
+                  <div className={`card${preview.impact.level === "high" || preview.impact.level === "critical" ? " alert" : ""}`}>
+                    <div className="label">Impact score</div>
+                    <div>
+                      <span className="mono">{preview.impact.score}/100</span> <StatusBadge status={preview.impact.level} />
+                    </div>
+                    <div className="dim">{preview.impact.summary}</div>
+                  </div>
+                  <div className="card">
+                    <div className="label">Reported consumers</div>
+                    <div className="mono">{preview.impact.manifest_consumers.length}</div>
+                    {preview.impact.manifest_consumers.slice(0, 5).map((consumer) => (
+                      <div className="dim" key={consumer.id}>{consumer.repo}{consumer.branch ? `@${consumer.branch}` : ""}</div>
+                    ))}
+                  </div>
+                  <div className="card">
+                    <div className="label">Dependent specs</div>
+                    <div className="mono">{preview.impact.dependent_specs.length}</div>
+                    {preview.impact.dependent_specs.slice(0, 5).map((dep) => (
+                      <div className="dim" key={`${dep.spec_id}-${dep.relation}`}>{dep.filename} · {dep.relation.replace("_", " ")}</div>
+                    ))}
+                  </div>
+                  <div className="card">
+                    <div className="label">Feedback and usage</div>
+                    <div className="mono">{preview.impact.feedback.open} open / {preview.impact.feedback.total} total</div>
+                    <div className="dim">
+                      {(preview.impact.recent_usage.agent_read ?? 0)} reads · {(preview.impact.recent_usage.search ?? 0)} searches ·{" "}
+                      {(preview.impact.recent_usage.sync_check ?? 0)} checks
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
         <div className="toolbar">

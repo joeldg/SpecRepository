@@ -64,6 +64,9 @@ Every governed repository should follow this workflow.
 
 3. **Check Drift**
    CI should run `specreg check`. Drift is a governance failure, not a style nit. The implementation may be correct against an old spec and wrong against the current one.
+   The bundled GitHub Action can run this check in pull requests and post a durable PR comment
+   with the exact drift output. When a repository is not yet reporting manifests, admins can
+   paste its `.specregistry.json` into the Reports page to diagnose local vs registry versions.
 
 4. **Implement**
    Work proceeds against the active spec set. When specs are unclear, agents should call `report_spec_feedback` rather than guess.
@@ -76,6 +79,9 @@ Every governed repository should follow this workflow.
 6. **Review Evidence**
    Reviewers should inspect diffs, lint, compatibility, contradiction reports, approval policy, recorded approvers, feedback clusters, audit findings, and audit log entries.
    The review SLA summary highlights pending changes that are approaching or past the configured age thresholds.
+   Publish previews should also be treated as blast-radius evidence: affected manifest
+   consumers, repo subscriptions, dependent specs, open feedback, recent usage, and the
+   calculated impact level indicate how carefully a change should be reviewed.
 
 7. **Improve Specs**
    If implementation problems arise from unclear or conflicting specs, update specs through the review workflow. Do not patch around bad guidance silently.

@@ -195,6 +195,39 @@ describe("sync-check (CLI drift detection)", () => {
     ]);
     expect(body.missing_locally.length).toBe(4);
   });
+
+  it("diagnoses an uploaded manifest without storing a project report", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/cli/manifest-diagnostics",
+      payload: {
+        manifest: {
+          project_type: "Acme Edge Device",
+          project: "github.com/acme/pasted",
+          specs: [
+            { filename: "DESIGN.md", version: "0.9.0", pin: "^0.9.0" },
+            { filename: "LOCAL_ONLY.md", version: "1.0.0" },
+          ],
+        },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      project_type: "Acme Edge Device",
+      project: "github.com/acme/pasted",
+      drift: true,
+      local_count: 2,
+      local_only_count: 1,
+      breaking_count: 1,
+    });
+    expect(res.json().outdated[0]).toMatchObject({
+      filename: "DESIGN.md",
+      local_version: "0.9.0",
+      latest_version: "1.0.0",
+      within_pin: false,
+    });
+    expect(res.json().not_on_server).toEqual(["LOCAL_ONLY.md"]);
+  });
 });
 
 describe("search", () => {
@@ -646,6 +679,13 @@ describe("governance and quality reports", () => {
     });
     expect(preview.generated_agent_files).toContain("AGENTS.md");
     expect(preview.checks.risk.score).toBeGreaterThan(0);
+    expect(preview.impact).toMatchObject({
+      scope: "project_type",
+      level: expect.any(String),
+      score: expect.any(Number),
+      feedback: { total: expect.any(Number), open: expect.any(Number) },
+    });
+    expect(preview.impact.summary).toContain("API.md");
   });
 
   it("exposes CODEOWNERS-style ownership and a dependency map", async () => {

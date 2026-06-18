@@ -1,0 +1,94 @@
+name: SpecRegistry Drift Check
+description: Run specreg check in CI and optionally comment on pull requests with drift diagnostics.
+
+inputs:
+  server:
+    description: SpecRegistry API base URL.
+    required: true
+  token:
+    description: SpecRegistry Bearer/API token.
+    required: false
+    default: ""
+  dir:
+    description: Directory containing .specregistry.json.
+    required: false
+    default: specs
+  comment:
+    description: Post a pull request comment with the check output.
+    required: false
+    default: "true"
+  fail-on-drift:
+    description: Fail the workflow when specreg check reports drift.
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Build bundled CLI
+      shell: bash
+      run: |
+        set -euo pipefail
+        ACTION_ROOT="$(cd "$GITHUB_ACTION_PATH/../../.." && pwd)"
+        cd "$ACTION_ROOT"
+        npm ci
+        npm run build
+
+    - name: Run specreg check
+      id: check
+      shell: bash
+      env:
+        SPECREG_SERVER: ${{ inputs.server }}
+        SPECREG_TOKEN: ${{ inputs.token }}
+        SPECREG_DIR: ${{ inputs.dir }}
+      run: |
+        set +e
+        ACTION_ROOT="$(cd "$GITHUB_ACTION_PATH/../../.." && pwd)"
+        OUTPUT_FILE="$RUNNER_TEMP/specreg-check.txt"
+        ARGS=(check --server "$SPECREG_SERVER" --dir "$SPECREG_DIR")
+        if [ -n "$SPECREG_TOKEN" ]; then
+          ARGS+=(--token "$SPECREG_TOKEN")
+        fi
+        cd "$GITHUB_WORKSPACE"
+        node "$ACTION_ROOT/packages/cli/dist/index.js" "${ARGS[@]}" > "$OUTPUT_FILE" 2>&1
+        STATUS=$?
+        cat "$OUTPUT_FILE"
+        {
+          echo "status=$STATUS"
+          echo "output<<EOF"
+          cat "$OUTPUT_FILE"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+        exit 0
+
+    - name: Comment on pull request
+      if: ${{ inputs.comment == 'true' && github.event_name == 'pull_request' }}
+      uses: actions/github-script@v7
+      env:
+        SPECREG_CHECK_STATUS: ${{ steps.check.outputs.status }}
+        SPECREG_CHECK_OUTPUT: ${{ steps.check.outputs.output }}
+      with:
+        script: |
+          const status = Number(process.env.SPECREG_CHECK_STATUS || '1');
+          const output = process.env.SPECREG_CHECK_OUTPUT || '';
+          const marker = '<!-- specreg-check -->';
+          const body = `${marker}
+          ### SpecRegistry drift check ${status === 0 ? 'passed' : 'failed'}
+
+          \`\`\`text
+          ${output.slice(0, 60000)}
+          \`\`\``;
+          const { owner, repo } = context.repo;
+          const issue_number = context.payload.pull_request.number;
+          const comments = await github.rest.issues.listComments({ owner, repo, issue_number, per_page: 100 });
+          const existing = comments.data.find((comment) => comment.body?.includes(marker));
+          if (existing) {
+            await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+          } else {
+            await github.rest.issues.createComment({ owner, repo, issue_number, body });
+          }
+
+    - name: Enforce drift policy
+      if: ${{ inputs.fail-on-drift == 'true' && steps.check.outputs.status != '0' }}
+      shell: bash
+      run: exit 1

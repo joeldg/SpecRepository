@@ -1,10 +1,9 @@
 import type { FastifyInstance } from "fastify";
-import { driftSeverity, satisfiesCaret } from "@specregistry/shared";
 import type { Spec, StubPrompt, StubPromptResponse, SyncCheckResponse } from "@specregistry/shared";
 import { findProjectConsumer, requireProjectType, requireString } from "../helpers.js";
 import { recordUsage } from "../lib/events.js";
 import { now, uuid } from "../db.js";
-import { bundleSpecs } from "../lib/compile.js";
+import { diagnoseManifest } from "../lib/manifestDiagnostics.js";
 
 export async function stubPromptRoutes(app: FastifyInstance): Promise<void> {
   app.post("/cli/manifest-report", async (req) => {
@@ -89,55 +88,48 @@ export async function stubPromptRoutes(app: FastifyInstance): Promise<void> {
   app.post("/cli/sync-check", async (req): Promise<SyncCheckResponse> => {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const pt = requireProjectType(app.db, requireString(body, "project_type"));
-    const project =
-      typeof body.project_id === "string"
-        ? findProjectConsumer(app.db, body.project_id, pt.id)
-        : typeof body.repo === "string"
-          ? findProjectConsumer(app.db, body.repo, pt.id)
-          : undefined;
     const local = Array.isArray(body.specs)
       ? (body.specs as Array<{ filename: string; version: string; pin?: string }>).filter(
           (s) => typeof s?.filename === "string" && typeof s?.version === "string"
         )
       : [];
     recordUsage(app.db, "sync_check", pt.id);
-
-    const latest = bundleSpecs(app.db, pt.id, "stable", project?.id);
-    const latestByName = new Map(latest.map((s) => [s.filename, s.current_version]));
-
-    const up_to_date: string[] = [];
-    const outdated: SyncCheckResponse["outdated"] = [];
-    const not_on_server: string[] = [];
-    for (const file of local) {
-      const serverVersion = latestByName.get(file.filename);
-      if (serverVersion === undefined) {
-        not_on_server.push(file.filename);
-      } else if (serverVersion === file.version) {
-        up_to_date.push(file.filename);
-      } else {
-        outdated.push({
-          filename: file.filename,
-          local_version: file.version,
-          latest_version: serverVersion,
-          severity: driftSeverity(file.version, serverVersion),
-          // A latest outside the manifest's caret pin signals a breaking change ahead.
-          within_pin: file.pin ? satisfiesCaret(serverVersion, file.pin) : true,
-        });
-      }
-    }
-    const localNames = new Set(local.map((f) => f.filename));
-    const missing_locally = latest
-      .filter((s) => !localNames.has(s.filename))
-      .map((s) => ({ filename: s.filename, latest_version: s.current_version }));
-
-    return {
+    return diagnoseManifest(app.db, {
       project_type: pt.name,
-      up_to_date,
-      outdated,
-      missing_locally,
-      not_on_server,
-      drift: outdated.length > 0 || missing_locally.length > 0,
-    };
+      repo: typeof body.repo === "string" ? body.repo : undefined,
+      project_id: typeof body.project_id === "string" ? body.project_id : undefined,
+      specs: local,
+    });
+  });
+
+  app.post("/cli/manifest-diagnostics", async (req) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const manifest = typeof body.manifest === "object" && body.manifest !== null ? body.manifest as Record<string, unknown> : body;
+    const projectType = typeof body.project_type === "string"
+      ? body.project_type
+      : typeof manifest.project_type === "string"
+        ? manifest.project_type
+        : requireString(body, "project_type");
+    const specs = Array.isArray(manifest.specs)
+      ? (manifest.specs as Array<{ filename?: unknown; version?: unknown; pin?: unknown; project_type?: unknown; scope?: unknown; sha256?: unknown }>).filter(
+          (s) => typeof s?.filename === "string" && typeof s?.version === "string"
+        ).map((s) => ({
+          filename: s.filename as string,
+          version: s.version as string,
+          pin: typeof s.pin === "string" ? s.pin : undefined,
+          project_type: typeof s.project_type === "string" ? s.project_type : undefined,
+          scope: typeof s.scope === "string" ? s.scope : undefined,
+          sha256: typeof s.sha256 === "string" ? s.sha256 : undefined,
+        }))
+      : [];
+    const diagnostics = diagnoseManifest(app.db, {
+      project_type: projectType,
+      repo: typeof body.repo === "string" ? body.repo : typeof manifest.project === "string" ? manifest.project : undefined,
+      project_id: typeof body.project_id === "string" ? body.project_id : undefined,
+      specs,
+    });
+    recordUsage(app.db, "sync_check", diagnostics.project_type_id, `diagnostics:${diagnostics.project ?? "pasted-manifest"}`);
+    return diagnostics;
   });
   // Tailored LLM prompts for generating missing spec files from an existing codebase.
   app.post("/cli/stub-prompts", async (req): Promise<StubPromptResponse> => {

@@ -514,13 +514,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: joeldg/SpecRepository/.github/actions/specreg-check@main
         with:
-          node-version: 20
-      - run: npm install
-      - run: npm run build
-      - run: node packages/cli/dist/index.js check --server https://specs.example.com
+          server: https://specs.example.com
+          token: ${{ secrets.SPECREG_TOKEN }}
+          dir: specs
+          comment: "true"
+          fail-on-drift: "true"
 ```
+
+The action builds the bundled CLI, runs `specreg check` against the checked-out
+repository, posts or updates a PR comment with the drift output, and fails the workflow
+when drift is detected unless `fail-on-drift` is set to `false`.
 
 Use `specreg audit --ci` when you want LLM-backed implementation conformance checks.
 That requires a server LLM provider configured through Settings or environment variables.
@@ -638,7 +643,9 @@ Use the LDAP tester in Settings before switching users over.
 - **Governance previews** — change requests carry a risk score for compatibility,
   security/privacy sensitivity, contradictions, and lint failures. Review detail includes
   a dry-run publish preview showing affected repos, generated agent files, webhooks, and
-  sync jobs before approval. Approval policies double as CODEOWNERS-style spec ownership
+  sync jobs before approval. The preview also includes impact analysis: affected manifest
+  consumers, subscribed repos, downstream spec references, open feedback, recent usage,
+  and an impact score/level. Approval policies double as CODEOWNERS-style spec ownership
   and are exposed through `GET /api/v1/spec-ownership`.
 - **Distribution** — `specreg check` gates CI on spec drift; repo subscriptions open
   GitHub PRs with updated specs on approval (configure a GitHub token in Settings or set `GITHUB_TOKEN`);
@@ -654,7 +661,8 @@ Use the LDAP tester in Settings before switching users over.
 - **Granular reports** — the Reports page and `GET /api/v1/reports/overview` break SDD
   health down by global specs, project types, and individual projects, with scope mix,
   feedback mix, review risk, stale specs, efficacy outcomes, and project drift counts.
-  Reports also show dependency-map and token-ROI panels.
+  Reports also show dependency-map, token-ROI panels, and a manifest diagnostics tool for
+  pasting a `.specregistry.json` to compare local spec versions against the registry.
   The page also includes an AI reporting test bench for synthetic feedback plus audit
   and efficacy smoke tests against the configured LLM provider.
 - **LLM spec automation** — the Generate Specs workbench detects missing governance specs
@@ -737,6 +745,7 @@ GET  /api/v1/automation/audit-prompt/:specId   GET /api/v1/automation/audit-prom
 POST /api/v1/automation/improvement-suggestions   POST /api/v1/automation/spec-pack
 GET  /api/v1/specs/:type/download[?channel=beta]   GET /api/v1/meta/public-key
 POST /api/v1/cli/stub-prompts           POST /api/v1/cli/sync-check
+POST /api/v1/cli/manifest-diagnostics
 GET/POST/PUT/DELETE /api/v1/templates   GET/POST/DELETE /api/v1/webhooks
 GET/POST/DELETE /api/v1/subscriptions   GET /api/v1/sync-jobs · POST /api/v1/sync-jobs/run
 GET  /api/v1/analytics/summary          GET /api/v1/reports/overview
