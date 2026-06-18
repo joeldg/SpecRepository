@@ -308,6 +308,22 @@ export default function ReviewDetailPage() {
                 </div>
               </div>
             )}
+            {preview.migration_checklist && (
+              <div className="section" style={{ marginTop: 12 }}>
+                <h2>Migration checklist</h2>
+                <ul>
+                  {preview.migration_checklist.items.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {preview.pr_summary_markdown && (
+              <div className="section" style={{ marginTop: 12 }}>
+                <h2>Generated PR summary</h2>
+                <pre className="diff" style={{ padding: 12 }}>{preview.pr_summary_markdown}</pre>
+              </div>
+            )}
           </div>
         )}
         <div className="toolbar">

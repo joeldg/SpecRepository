@@ -23,6 +23,8 @@ import { lintContent } from "../lib/lint.js";
 import { dependencyMap } from "../lib/dependencies.js";
 import { reindexSpec } from "../lib/search.js";
 import { sha256, signManifest } from "../lib/sign.js";
+import { reviewImpact } from "../lib/reviewImpact.js";
+import { migrationChecklist, specChangeSummaryMarkdown } from "../lib/specChangeSummary.js";
 
 const SUMMARY_SELECT = `
   SELECT s.id, s.project_type_id, s.project_id, s.filename, s.current_version, s.status,
@@ -73,6 +75,19 @@ export async function specRoutes(app: FastifyInstance): Promise<void> {
     const { project_type_id, project_id } = req.query as { project_type_id?: string; project_id?: string };
     if (project_id) requireProjectConsumer(app.db, project_id);
     return dependencyMap(app.db, project_type_id, project_id);
+  });
+
+  app.get("/specs/:key/impact", async (req) => {
+    const { key } = req.params as { key: string };
+    const { delta } = req.query as { delta?: string };
+    const versionDelta = delta === "major" || delta === "minor" || delta === "patch" ? delta : "minor";
+    const spec = requireSpec(app.db, key);
+    return {
+      spec,
+      impact: reviewImpact(app.db, spec, versionDelta),
+      migration_checklist: migrationChecklist(app.db, spec, versionDelta),
+      pr_summary_markdown: specChangeSummaryMarkdown(app.db, spec, versionDelta),
+    };
   });
 
   // Zipped folder of the latest published specs for a project type (+ all global specs).

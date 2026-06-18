@@ -82,6 +82,9 @@ Every governed repository should follow this workflow.
    Publish previews should also be treated as blast-radius evidence: affected manifest
    consumers, repo subscriptions, dependent specs, open feedback, recent usage, and the
    calculated impact level indicate how carefully a change should be reviewed.
+   For downstream work, reviewers should use the generated migration checklist and
+   PR summary/changelog so subscribed repositories receive actionable verification steps,
+   not just updated Markdown.
 
 7. **Improve Specs**
    If implementation problems arise from unclear or conflicting specs, update specs through the review workflow. Do not patch around bad guidance silently.

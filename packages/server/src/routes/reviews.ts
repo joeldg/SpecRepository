@@ -10,6 +10,7 @@ import { enqueueSyncJobs, processSyncJobs } from "../lib/github.js";
 import { reindexSpec } from "../lib/search.js";
 import { getAppKeyConfig } from "../lib/appKeys.js";
 import { reviewImpact } from "../lib/reviewImpact.js";
+import { migrationChecklist, specChangeSummaryMarkdown } from "../lib/specChangeSummary.js";
 
 function requireChangeRequest(app: FastifyInstance, id: string): ChangeRequest {
   const cr = app.db.prepare("SELECT * FROM change_requests WHERE id = ?").get(id) as
@@ -135,6 +136,11 @@ export async function reviewRoutes(app: FastifyInstance): Promise<void> {
       sync_jobs_to_enqueue: affectedRepos.length,
       webhooks_to_fire: webhooks,
       impact: reviewImpact(app.db, spec, cr.version_delta),
+      migration_checklist: migrationChecklist(app.db, spec, cr.version_delta, cr),
+      pr_summary_markdown: specChangeSummaryMarkdown(app.db, spec, cr.version_delta, {
+        ...cr,
+        resulting_version: cr.resulting_version ?? undefined,
+      }),
       checks: {
         compatibility: cr.compatibility ? JSON.parse(cr.compatibility) : null,
         lint: cr.lint ? JSON.parse(cr.lint) : null,

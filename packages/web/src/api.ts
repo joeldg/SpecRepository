@@ -67,7 +67,25 @@ export interface PublishPreview {
     pending_reviews: number;
     recent_usage: Record<string, number>;
   };
+  migration_checklist?: MigrationChecklist;
+  pr_summary_markdown?: string;
   checks: Record<string, unknown>;
+}
+export interface MigrationChecklist {
+  spec_id: string;
+  filename: string;
+  version_delta: string;
+  impact_level: string;
+  affected_projects: number;
+  affected_subscriptions: number;
+  dependent_specs: Array<{ spec_id: string; filename: string; relation: string }>;
+  items: string[];
+}
+export interface SpecImpactResponse {
+  spec: Spec;
+  impact: NonNullable<PublishPreview["impact"]>;
+  migration_checklist: MigrationChecklist;
+  pr_summary_markdown: string;
 }
 export interface ManifestDiagnostics {
   project_type: string;
@@ -411,6 +429,7 @@ export const api = {
 
   specs: () => request<SpecSummary[]>("/api/v1/specs"),
   spec: (id: string) => request<SpecDetail>(`/api/v1/specs/${id}`),
+  specImpact: (id: string, delta = "minor") => request<SpecImpactResponse>(`/api/v1/specs/${id}/impact?delta=${encodeURIComponent(delta)}`),
   createSpec: (body: { project_type_id: string; filename: string; content: string; updated_by: string }) =>
     request<Spec>("/api/v1/specs", { method: "POST", body: JSON.stringify(body) }),
   updateDraft: (id: string, body: { content: string; updated_by: string }) =>

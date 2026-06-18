@@ -645,8 +645,9 @@ Use the LDAP tester in Settings before switching users over.
   a dry-run publish preview showing affected repos, generated agent files, webhooks, and
   sync jobs before approval. The preview also includes impact analysis: affected manifest
   consumers, subscribed repos, downstream spec references, open feedback, recent usage,
-  and an impact score/level. Approval policies double as CODEOWNERS-style spec ownership
-  and are exposed through `GET /api/v1/spec-ownership`.
+  and an impact score/level. It also generates a downstream migration checklist and
+  PR-ready summary/changelog for spec update pull requests. Approval policies double as
+  CODEOWNERS-style spec ownership and are exposed through `GET /api/v1/spec-ownership`.
 - **Distribution** — `specreg check` gates CI on spec drift; repo subscriptions open
   GitHub PRs with updated specs on approval (configure a GitHub token in Settings or set `GITHUB_TOKEN`);
   webhooks (JSON or Slack format) fire on publish/review/feedback events.
@@ -665,6 +666,9 @@ Use the LDAP tester in Settings before switching users over.
   pasting a `.specregistry.json` to compare local spec versions against the registry.
   The page also includes an AI reporting test bench for synthetic feedback plus audit
   and efficacy smoke tests against the configured LLM provider.
+- **Impact explorer** — the Impact page and `GET /api/v1/specs/:id/impact?delta=` expose
+  the same blast-radius model outside the review flow, including consumers, dependencies,
+  migration checklist items, and generated PR summary markdown.
 - **LLM spec automation** — the Generate Specs workbench detects missing governance specs
   from repo evidence, uses purpose-based templates for common spec types, generates prompts
   or server-LLM drafts, and creates reviewed registry drafts rather than publishing directly.
@@ -720,6 +724,7 @@ Use the LDAP tester in Settings before switching users over.
 GET  /api/v1/project-types              POST /api/v1/project-types
 GET  /api/v1/specs                      POST /api/v1/specs
 GET  /api/v1/specs/:id                  PUT  /api/v1/specs/:id          (drafts only)
+GET  /api/v1/specs/:id/impact?delta=patch|minor|major
 POST /api/v1/specs/:id/publish          GET  /api/v1/specs/:type/download   (zip)
 POST /api/v1/specs/review               GET  /api/v1/reviews[?status=]
 GET  /api/v1/reviews/sla

@@ -686,6 +686,22 @@ describe("governance and quality reports", () => {
       feedback: { total: expect.any(Number), open: expect.any(Number) },
     });
     expect(preview.impact.summary).toContain("API.md");
+    expect(preview.migration_checklist.items.length).toBeGreaterThan(0);
+    expect(preview.pr_summary_markdown).toContain("## Migration checklist");
+    expect(preview.pr_summary_markdown).toContain("## Changelog");
+  });
+
+  it("exposes standalone spec impact exploration with migration guidance", async () => {
+    const spec = await findSpec("API.md", "Acme Edge Device");
+    const res = await app.inject({ method: "GET", url: `/api/v1/specs/${spec.id}/impact?delta=major` });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      spec: expect.objectContaining({ id: spec.id, filename: "API.md" }),
+      impact: expect.objectContaining({ scope: "project_type", level: expect.any(String), score: expect.any(Number) }),
+      migration_checklist: expect.objectContaining({ version_delta: "major", items: expect.any(Array) }),
+    });
+    expect(res.json().migration_checklist.items.join("\n")).toContain("breaking governance change");
+    expect(res.json().pr_summary_markdown).toContain("## Changelog");
   });
 
   it("exposes CODEOWNERS-style ownership and a dependency map", async () => {

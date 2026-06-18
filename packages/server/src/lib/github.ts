@@ -1,6 +1,7 @@
 import type { Spec } from "@specregistry/shared";
 import type { Db } from "../db.js";
 import { now, uuid } from "../db.js";
+import { specChangeSummaryMarkdown } from "./specChangeSummary.js";
 
 interface SubscriptionRow {
   id: string;
@@ -58,7 +59,7 @@ async function gh(token: string, method: string, path: string, body?: unknown): 
   });
 }
 
-async function pushSpecToRepo(token: string, sub: SubscriptionRow, spec: Spec): Promise<string> {
+async function pushSpecToRepo(db: Db, token: string, sub: SubscriptionRow, spec: Spec): Promise<string> {
   const branchName = `specreg/${spec.filename.replace(/\.md$/i, "").toLowerCase()}-${spec.current_version}`;
   const filePath = `${sub.base_path.replace(/\/+$/, "")}/${spec.filename}`;
 
@@ -94,7 +95,7 @@ async function pushSpecToRepo(token: string, sub: SubscriptionRow, spec: Spec): 
     title: `Update ${spec.filename} to v${spec.current_version} (SpecRegistry)`,
     head: branchName,
     base: sub.branch,
-    body: `Approved specification update distributed by SpecRegistry.\n\n- **File:** \`${filePath}\`\n- **Version:** ${spec.current_version}`,
+    body: specChangeSummaryMarkdown(db, spec, "minor", { resulting_version: spec.current_version, file_path: filePath }),
   });
   if (pr.ok) {
     const prBody = (await pr.json()) as { html_url: string };
@@ -134,7 +135,7 @@ export async function processSyncJobs(db: Db, token: string | undefined): Promis
     let detail: string;
     try {
       if (!sub || !spec) throw new Error("Subscription or spec no longer exists");
-      detail = await pushSpecToRepo(token, sub, spec);
+      detail = await pushSpecToRepo(db, token, sub, spec);
       status = "done";
     } catch (err) {
       status = "error";

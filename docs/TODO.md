@@ -29,14 +29,14 @@
 - [x] Official `specreg check` GitHub Action with optional PR comments.
 - [x] Dashboard drift diagnostics from an uploaded or pasted `.specregistry.json`.
 - GitHub App integration instead of raw `GITHUB_TOKEN`.
-- Generated spec update PR summaries and changelogs.
-- Spec change migration checklist generation for downstream projects.
+- [x] Generated spec update PR summaries and changelogs.
+- [x] Spec change migration checklist generation for downstream projects.
 
 ## Search and Discovery
 
 - Semantic search alongside FTS5.
 - Saved searches for common policy areas such as auth, PII, deployment, and observability.
-- Spec impact explorer for browsing dependencies, consumers, recent usage, and drift outside
+- [x] Spec impact explorer for browsing dependencies, consumers, recent usage, and drift outside
   the review flow.
 
 ## AI Feedback and Efficacy

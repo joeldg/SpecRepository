@@ -14,6 +14,7 @@ import SearchPage from "./pages/SearchPage";
 import TemplatesPage from "./pages/TemplatesPage";
 import SettingsPage from "./pages/SettingsPage";
 import GenerationWorkbenchPage from "./pages/GenerationWorkbenchPage";
+import ImpactExplorerPage from "./pages/ImpactExplorerPage";
 
 export default function App() {
   const [author, setAuthorState] = useState(getAuthor());
@@ -42,6 +43,9 @@ export default function App() {
         </NavLink>
         <NavLink to="/reports" className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
           Reports
+        </NavLink>
+        <NavLink to="/impact" className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
+          Impact
         </NavLink>
         <NavLink to="/generate" className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
           Generate Specs
@@ -101,6 +105,7 @@ export default function App() {
           <Route path="/reviews/:id" element={<ReviewDetailPage />} />
           <Route path="/feedback" element={<FeedbackPage />} />
           <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/impact" element={<ImpactExplorerPage />} />
           <Route path="/generate" element={<GenerationWorkbenchPage />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/project-types" element={<ProjectTypesPage />} />
