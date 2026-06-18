@@ -323,7 +323,7 @@ export default function SettingsPage() {
                         ? "gpt-4.1"
                         : llm.provider === "gemini"
                           ? "gemini-3.5-flash"
-                          : "llama3.1"
+                          : "google/gemma-4-12b-qat"
                   }
                   value={llm.model}
                   style={{ minWidth: 220, display: llmModels.length ? "none" : undefined }}
@@ -392,7 +392,7 @@ export default function SettingsPage() {
                         ? "Optional OpenAI-compatible proxy URL"
                         : llm.provider === "gemini"
                           ? "Optional Gemini API base URL"
-                      : "http://localhost:11434/v1 or http://llm-gateway.internal/v1"
+                      : "LM Studio: http://10.0.0.142:1234 · Ollama: http://localhost:11434/v1"
                   }
                   value={llm.base_url}
                   style={{ flex: 1, minWidth: 360 }}
@@ -460,7 +460,7 @@ export default function SettingsPage() {
                 </pre>
               )}
               <div className="faint">
-                Use OpenAI or Gemini for hosted providers. OpenAI-compatible mode supports local/network services such as Ollama, LM Studio, vLLM, LocalAI, or an internal LLM gateway.
+                Use OpenAI or Gemini for hosted providers. OpenAI-compatible mode supports local/network services such as LM Studio, Ollama, vLLM, LocalAI, or an internal LLM gateway. Root URLs like http://10.0.0.142:1234 are normalized to /v1 automatically.
               </div>
             </div>
           </>

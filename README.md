@@ -902,6 +902,9 @@ LLM_BASE_URL=http://host.docker.internal:11434/v1
 
 OpenAI-compatible mode works with services such as Ollama, LM Studio, vLLM, LocalAI, or an
 internal gateway that exposes `/chat/completions`.
+For LM Studio, either `http://host:1234` or `http://host:1234/v1` is accepted; root
+OpenAI-compatible URLs are normalized to `/v1` automatically for model loading and chat
+tests.
 The Settings page can query available models from Anthropic, OpenAI, Gemini, and
 OpenAI-compatible providers that expose `/models`.
 

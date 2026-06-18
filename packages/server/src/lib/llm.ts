@@ -47,6 +47,67 @@ function uniqueModels(...groups: string[][]): string[] {
   return models;
 }
 
+function openAiCompatibleBase(config: Pick<LlmConfig, "provider" | "base_url">): string {
+  const raw =
+    config.provider === "openai"
+      ? config.base_url || "https://api.openai.com/v1"
+      : config.base_url;
+  const trimmed = raw.replace(/\/+$/, "");
+  if (!trimmed) return "";
+  try {
+    const url = new URL(trimmed);
+    if (url.pathname === "" || url.pathname === "/") {
+      url.pathname = "/v1";
+      return url.toString().replace(/\/+$/, "");
+    }
+  } catch {
+    // Fall through and use the literal value; the fetch error will be explicit.
+  }
+  return trimmed;
+}
+
+function textFromOpenAiChoice(body: unknown): string {
+  const choices = (body as { choices?: unknown[] })?.choices;
+  if (!Array.isArray(choices) || choices.length === 0) return "";
+  const first = choices[0] as {
+    text?: unknown;
+    message?: {
+      content?: unknown;
+      reasoning_content?: unknown;
+      tool_calls?: unknown;
+    };
+  };
+  const content = first.message?.content;
+  if (typeof content === "string" && content.trim()) return content.trim();
+  if (Array.isArray(content)) {
+    const text = content
+      .map((part) => {
+        if (typeof part === "string") return part;
+        if (part && typeof part === "object") {
+          const record = part as Record<string, unknown>;
+          if (typeof record.text === "string") return record.text;
+          if (typeof record.content === "string") return record.content;
+        }
+        return "";
+      })
+      .join("")
+      .trim();
+    if (text) return text;
+  }
+  if (typeof first.text === "string" && first.text.trim()) return first.text.trim();
+  if (typeof first.message?.reasoning_content === "string" && first.message.reasoning_content.trim()) {
+    return first.message.reasoning_content.trim();
+  }
+  return "";
+}
+
+function noTextDetail(body: unknown): string {
+  const choice = (body as { choices?: Array<Record<string, unknown>> })?.choices?.[0];
+  const finish = typeof choice?.finish_reason === "string" ? ` finish_reason=${choice.finish_reason};` : "";
+  const keys = choice ? ` choice_keys=${Object.keys(choice).join(",")};` : "";
+  return `LLM returned no text.${finish}${keys} Verify the selected model is a chat/completions model and that the base URL points at the OpenAI-compatible /v1 API.`;
+}
+
 function settingMap(db: Db): Map<string, string> {
   return new Map(
     (db.prepare("SELECT key, value FROM settings WHERE key LIKE 'llm.%'").all() as Array<{ key: string; value: string }>).map(
@@ -187,10 +248,7 @@ export async function runLlmText(db: Db, input: LlmTextInput): Promise<{ text: s
     return { text, model: config.model, provider: config.provider };
   }
 
-  const openAiBase =
-    config.provider === "openai"
-      ? (config.base_url || "https://api.openai.com/v1").replace(/\/+$/, "")
-      : config.base_url.replace(/\/+$/, "");
+  const openAiBase = openAiCompatibleBase(config);
   if (!openAiBase) {
     throw new HttpError(503, "LLM provider openai_compatible requires LLM_BASE_URL or a saved base URL");
   }
@@ -215,9 +273,9 @@ export async function runLlmText(db: Db, input: LlmTextInput): Promise<{ text: s
   if (!res.ok) {
     throw new HttpError(502, `LLM provider error ${res.status}: ${await res.text()}`);
   }
-  const body = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
-  const text = body.choices?.[0]?.message?.content?.trim() ?? "";
-  if (!text) throw new HttpError(502, "LLM returned no text");
+  const body = await res.json();
+  const text = textFromOpenAiChoice(body);
+  if (!text) throw new HttpError(502, noTextDetail(body));
   return { text, model: config.model, provider: config.provider };
 }
 
@@ -246,10 +304,7 @@ export async function listLlmModels(db: Db): Promise<{ provider: LlmProvider; mo
     return { provider: config.provider, models: uniqueModels(GEMINI_MODEL_FALLBACKS, models) };
   }
 
-  const base =
-    config.provider === "openai"
-      ? (config.base_url || "https://api.openai.com/v1").replace(/\/+$/, "")
-      : config.base_url.replace(/\/+$/, "");
+  const base = openAiCompatibleBase(config);
   if (!base) return { provider: config.provider, models: [] };
   const res = await fetch(`${base}/models`, {
     headers: { ...(config.api_key ? { authorization: `Bearer ${config.api_key}` } : {}) },

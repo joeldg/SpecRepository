@@ -546,6 +546,62 @@ describe("LLM settings", () => {
     );
   });
 
+  it("normalizes LM Studio root URLs and accepts local response variants", async () => {
+    await app.inject({
+      method: "PUT",
+      url: "/api/v1/llm/config",
+      payload: {
+        provider: "openai_compatible",
+        model: "google/gemma-4-12b-qat",
+        base_url: "http://10.0.0.142:1234",
+        max_tokens: 256,
+        clear_api_key: true,
+      },
+    });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ choices: [{ text: "ok from lm studio" }] }), {
+        headers: { "content-type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const test = await app.inject({ method: "POST", url: "/api/v1/llm/test", payload: { prompt: "ping", max_tokens: 64 } });
+    expect(test.statusCode).toBe(200);
+    expect(test.json()).toMatchObject({
+      ok: true,
+      provider: "openai_compatible",
+      model: "google/gemma-4-12b-qat",
+      text: "ok from lm studio",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://10.0.0.142:1234/v1/chat/completions",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.not.objectContaining({ authorization: expect.any(String) }),
+      })
+    );
+  });
+
+  it("returns actionable diagnostics when a local LLM response has no text", async () => {
+    await app.inject({
+      method: "PUT",
+      url: "/api/v1/llm/config",
+      payload: { provider: "openai_compatible", model: "local-empty", base_url: "http://localhost:1234" },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ choices: [{ message: { content: "" }, finish_reason: "stop" }] }), {
+          headers: { "content-type": "application/json" },
+        })
+      )
+    );
+    const test = await app.inject({ method: "POST", url: "/api/v1/llm/test", payload: { prompt: "ping" } });
+    expect(test.statusCode).toBe(502);
+    expect(test.json().message).toContain("finish_reason=stop");
+    expect(test.json().message).toContain("/v1");
+  });
+
   it("lists models from OpenAI-compatible, OpenAI, and Gemini providers", async () => {
     const fetchMock = vi.fn();
     fetchMock.mockResolvedValueOnce(
@@ -557,7 +613,7 @@ describe("LLM settings", () => {
     await app.inject({
       method: "PUT",
       url: "/api/v1/llm/config",
-      payload: { provider: "openai_compatible", base_url: "http://local-llm/v1", model: "local-a" },
+      payload: { provider: "openai_compatible", base_url: "http://local-llm", model: "local-a" },
     });
     const local = await app.inject({ method: "GET", url: "/api/v1/llm/models" });
     expect(local.json().models).toEqual(["local-a", "local-b"]);
