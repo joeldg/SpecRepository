@@ -270,6 +270,30 @@ describe("search", () => {
     expect(res.results.length).toBe(1);
     expect(res.results[0].current_version).toBe("1.1.0");
   });
+
+  it("indexes section embeddings and supports semantic and hybrid search modes", async () => {
+    const initial = await getJson("/api/v1/embeddings/status");
+    expect(initial.ready).toBe(false);
+
+    const reindex = await app.inject({ method: "POST", url: "/api/v1/embeddings/reindex" });
+    expect(reindex.statusCode).toBe(200);
+    expect(reindex.json().status.ready).toBe(true);
+    expect(reindex.json().status.indexed_sections).toBeGreaterThan(0);
+
+    const semantic = await getJson("/api/v1/ai/search?q=TLS%20firewall&mode=semantic");
+    expect(semantic.mode).toBe("semantic");
+    expect(semantic.results.length).toBeGreaterThan(0);
+    expect(semantic.results[0]).toMatchObject({
+      match_type: "semantic",
+      score: expect.any(Number),
+      explanation: expect.stringContaining("Vector similarity"),
+    });
+
+    const hybrid = await getJson("/api/v1/ai/search?q=TLS%20firewall&mode=hybrid");
+    expect(hybrid.mode).toBe("hybrid");
+    expect(hybrid.results.length).toBeGreaterThan(0);
+    expect(hybrid.results.some((row: any) => row.match_type === "hybrid")).toBe(true);
+  });
 });
 
 describe("templates & lint", () => {

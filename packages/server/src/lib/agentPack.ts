@@ -38,7 +38,7 @@ so project-scoped specs and overrides load with global and project-type specs.
 ## Required Workflow
 
 1. Before making code changes, call \`get_specs\` for the project type and repo. Treat global, project-type, and project-scoped specs as governing instructions.
-2. Use \`search_specs\` with the project type and repo when you need focused guidance from a large spec set.
+2. Use \`search_specs\` with \`mode: "hybrid"\`, the project type, and repo when you need focused guidance from a large spec set.
 3. If specs are ambiguous, contradictory, or outdated, call \`report_spec_feedback\` with the affected \`spec_id\`, issue type, description, and relevant code or spec context.
 4. Do not silently ignore a governed requirement. Either follow it or report feedback.
 5. When a local repo has run \`specreg init\`, respect the checked-in \`specs/.specregistry.json\` manifest and use \`specreg check\` or \`specreg sync\` to detect drift.
@@ -47,7 +47,7 @@ so project-scoped specs and overrides load with global and project-type specs.
 
 - \`list_project_types\`: list configured project types.
 - \`get_specs\`: fetch full markdown specs for a project type, including global specs and repo-specific overrides.
-- \`search_specs\`: search matching spec sections, including project-scoped specs when a repo is configured.
+- \`search_specs\`: search matching spec sections with FTS, semantic, or hybrid retrieval, including project-scoped specs when a repo is configured.
 - \`report_spec_feedback\`: file ambiguity, contradiction, or outdated-guidance feedback for review.
 `;
 }

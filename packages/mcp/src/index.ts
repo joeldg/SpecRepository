@@ -80,15 +80,17 @@ server.tool(
 
 server.tool(
   "search_specs",
-  "Search governed specification documents by keyword and get back matching sections only. Includes project-scoped specs when repo/project_id is provided or SPECREG_REPO is set.",
+  "Search governed specification documents and get back matching sections only. Supports fts, semantic, and hybrid modes. Includes project-scoped specs when repo/project_id is provided or SPECREG_REPO is set.",
   {
     query: z.string().describe("Search terms, e.g. 'TLS firewall rules'"),
+    mode: z.enum(["fts", "semantic", "hybrid"]).optional().describe("Search mode. Defaults to hybrid when the registry has semantic embeddings indexed, otherwise fts."),
     project_type: z.string().optional().describe("Restrict to one project type (plus global and project-scoped specs)."),
     repo: z.string().optional().describe("Repo/project identity for project-scoped specs. Defaults to SPECREG_REPO when set."),
     project_id: z.string().optional().describe("Explicit SpecRegistry project id."),
   },
-  async ({ query, project_type, repo, project_id }) => {
+  async ({ query, mode, project_type, repo, project_id }) => {
     const params = new URLSearchParams({ q: query });
+    params.set("mode", mode ?? "hybrid");
     const type = project_type ?? DEFAULT_TYPE;
     if (type) params.set("project_type", type);
     if (project_id) params.set("project_id", project_id);

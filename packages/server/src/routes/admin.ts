@@ -13,6 +13,13 @@ import { actorFrom, recordAudit } from "../lib/auditLog.js";
 import { processSyncJobs } from "../lib/github.js";
 import { listLlmModels, publicLlmConfig, runLlmText, saveLlmConfig, type LlmConfig } from "../lib/llm.js";
 import { getAppKeyConfig, publicAppKeyConfig, saveAppKeyConfig, type AppKeyConfig } from "../lib/appKeys.js";
+import {
+  publicEmbeddingConfig,
+  reindexSemanticAll,
+  saveEmbeddingConfig,
+  semanticIndexStatus,
+  type EmbeddingConfig,
+} from "../lib/embeddings.js";
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
   // --- App keys / integration secrets ---
@@ -71,6 +78,42 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/llm/models", async () => {
     return listLlmModels(app.db);
+  });
+
+  // --- Embedding provider settings for semantic search ---
+
+  app.get("/embeddings/config", async () => {
+    return publicEmbeddingConfig(app.db);
+  });
+
+  app.put("/embeddings/config", async (req) => {
+    const body = (req.body ?? {}) as Partial<EmbeddingConfig> & { clear_api_key?: boolean };
+    const saved = publicEmbeddingConfig(app.db, saveEmbeddingConfig(app.db, body));
+    recordAudit(app.db, {
+      actor: actorFrom(req, "settings"),
+      action: "embeddings.config.updated",
+      target_type: "embeddings",
+      summary: "Embedding configuration updated",
+      detail: { provider: saved.provider, model: saved.model, base_url: saved.base_url, dimensions: saved.dimensions, has_api_key: saved.has_api_key },
+    });
+    return saved;
+  });
+
+  app.get("/embeddings/status", async () => {
+    return semanticIndexStatus(app.db);
+  });
+
+  app.post("/embeddings/reindex", async (req) => {
+    const result = await reindexSemanticAll(app.db);
+    const status = semanticIndexStatus(app.db);
+    recordAudit(app.db, {
+      actor: actorFrom(req, "settings"),
+      action: "embeddings.reindexed",
+      target_type: "embeddings",
+      summary: `Semantic index rebuilt: ${result.indexed_sections} section(s) updated`,
+      detail: result,
+    });
+    return { ...result, status };
   });
 
   // --- LDAP settings ---

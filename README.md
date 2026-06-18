@@ -655,10 +655,11 @@ Use the LDAP tester in Settings before switching users over.
   project type. Global specs define the shared baseline, project-type specs define the
   domain baseline, and project specs override only that repo when local behavior needs
   governed guidance without changing every consumer of the type.
-- **Search & analytics** — `GET /api/v1/ai/search?q=` serves section-level FTS5 hits
-  to agents and the Search page; usage events (pulls, agent reads, searches, drift
-  checks) roll up on the dashboard, including stale-but-published spec detection.
-  Search and agent spec responses include stable section anchors/permalinks for exact citations.
+- **Search & analytics** — `GET /api/v1/ai/search?q=&mode=fts|semantic|hybrid` serves
+  section-level FTS5, embedding, or combined search hits to agents and the Search page;
+  usage events (pulls, agent reads, searches, drift checks) roll up on the dashboard,
+  including stale-but-published spec detection. Search and agent spec responses include
+  stable section anchors/permalinks for exact citations.
 - **Granular reports** — the Reports page and `GET /api/v1/reports/overview` break SDD
   health down by global specs, project types, and individual projects, with scope mix,
   feedback mix, review risk, stale specs, efficacy outcomes, and project drift counts.
@@ -734,7 +735,7 @@ GET  /api/v1/ai/specs/:projectType      POST /api/v1/ai/feedback
 GET  /api/v1/ai/feedback[?status=]      POST /api/v1/ai/feedback/:id/status
 GET  /api/v1/ai/feedback/clusters       POST /api/v1/ai/feedback/:id/draft-fix
 POST /api/v1/ai/feedback/clusters/status   POST /api/v1/ai/feedback/clusters/draft-fix
-GET  /api/v1/ai/search?q=[&project_type=&repo=]  GET /api/v1/ai/mcp-guide/:type
+GET  /api/v1/ai/search?q=[&mode=fts|semantic|hybrid&project_type=&repo=]  GET /api/v1/ai/mcp-guide/:type
 POST /api/v1/ai/audit                   POST /api/v1/ai/efficacy
 GET  /api/v1/ai/efficacy/trends         POST /api/v1/ai/efficacy/scheduled-run
 POST /api/v1/ai/regression-suite        GET /api/v1/ai/token-roi
@@ -759,6 +760,7 @@ GET/POST /api/v1/auth/users             GET/POST/DELETE /api/v1/auth/api-keys
 GET/PUT /api/v1/ldap/config             POST /api/v1/ldap/test · POST /api/v1/ldap/role-preview
 GET  /api/v1/audit-log
 GET/PUT /api/v1/llm/config             POST /api/v1/llm/test
+GET/PUT /api/v1/embeddings/config      GET/POST /api/v1/embeddings/status|reindex
 POST /api/v1/integrations/github/webhook   POST /api/v1/integrations/slack/actions
 GET  /metrics
 ```
@@ -792,6 +794,11 @@ map roles with `LDAP_ADMIN_GROUP` / `LDAP_REVIEWER_GROUP`.
 | `LLM_BASE_URL` | Anthropic proxy or OpenAI-compatible local/network endpoint |
 | `LLM_API_KEY` | Server LLM API key; optional for some local endpoints |
 | `LLM_MAX_TOKENS` | Default server LLM token budget |
+| `EMBEDDING_PROVIDER` | Semantic search provider: `local_hash`, `openai`, `gemini`, or `openai_compatible` |
+| `EMBEDDING_MODEL` | Embedding model name |
+| `EMBEDDING_BASE_URL` | OpenAI-compatible local/network embedding endpoint or hosted proxy |
+| `EMBEDDING_API_KEY` | Embedding provider API key; optional for local endpoints |
+| `EMBEDDING_DIMENSIONS` | Local deterministic embedding dimensions (default 128) |
 | `SPECREG_AUTOMATION_ENABLED` | Master flag for automation APIs and workbench controls |
 | `SPECREG_AUTOMATION_GAP_DETECTION` | Enable spec gap detection |
 | `SPECREG_AUTOMATION_GENERATION` | Enable spec generation preview/draft creation |

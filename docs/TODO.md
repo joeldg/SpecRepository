@@ -34,7 +34,7 @@
 
 ## Search and Discovery
 
-- Semantic search alongside FTS5.
+- [x] Semantic search alongside FTS5.
 - Saved searches for common policy areas such as auth, PII, deployment, and observability.
 - [x] Spec impact explorer for browsing dependencies, consumers, recent usage, and drift outside
   the review flow.

@@ -21,7 +21,7 @@ import { dispatchWebhooks, recordUsage } from "../lib/events.js";
 import { enqueueSyncJobs } from "../lib/github.js";
 import { lintContent } from "../lib/lint.js";
 import { dependencyMap } from "../lib/dependencies.js";
-import { reindexSpec } from "../lib/search.js";
+import { reindexSpecSearch } from "../lib/search.js";
 import { sha256, signManifest } from "../lib/sign.js";
 import { reviewImpact } from "../lib/reviewImpact.js";
 import { migrationChecklist, specChangeSummaryMarkdown } from "../lib/specChangeSummary.js";
@@ -212,7 +212,7 @@ export async function specRoutes(app: FastifyInstance): Promise<void> {
     });
     publish();
     const published = requireSpec(app.db, spec.id);
-    reindexSpec(app.db, published);
+    await reindexSpecSearch(app.db, published);
     const lint = lintContent(app.db, published.filename, published.content);
     await dispatchWebhooks(app.db, "spec.published", `${published.filename} published as 1.0.0 by ${publishedBy}`, {
       spec_id: published.id,
@@ -298,7 +298,7 @@ export async function specRoutes(app: FastifyInstance): Promise<void> {
     promote();
 
     const updated = requireSpec(app.db, spec.id);
-    reindexSpec(app.db, updated);
+    await reindexSpecSearch(app.db, updated);
     enqueueSyncJobs(app.db, updated);
     await dispatchWebhooks(app.db, "spec.published", `${updated.filename} v${stableVersion} promoted from ${version}`, {
       spec_id: updated.id,

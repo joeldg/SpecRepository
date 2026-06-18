@@ -5,6 +5,7 @@ import { api, type ProjectTypeWithCount, type SearchHit } from "../api";
 export default function SearchPage() {
   const [query, setQuery] = useState("");
   const [typeName, setTypeName] = useState("");
+  const [mode, setMode] = useState<"fts" | "semantic" | "hybrid">("fts");
   const [types, setTypes] = useState<ProjectTypeWithCount[]>([]);
   const [results, setResults] = useState<SearchHit[]>();
   const [error, setError] = useState<string>();
@@ -17,7 +18,7 @@ export default function SearchPage() {
     if (!query.trim()) return;
     setError(undefined);
     try {
-      const res = await api.search(query, typeName || undefined);
+      const res = await api.search(query, typeName || undefined, mode);
       setResults(res.results);
     } catch (e) {
       setError((e as Error).message);
@@ -28,7 +29,7 @@ export default function SearchPage() {
     <>
       <div className="page-head">
         <h1>Search Specs</h1>
-        <span className="sub">Section-level full-text search — the same index agents query via /api/v1/ai/search</span>
+        <span className="sub">Section-level FTS, semantic, or hybrid search — the same index agents query via /api/v1/ai/search</span>
       </div>
       {error && <div className="error-banner">{error}</div>}
 
@@ -51,6 +52,11 @@ export default function SearchPage() {
               </option>
             ))}
         </select>
+        <select value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}>
+          <option value="fts">FTS</option>
+          <option value="semantic">Semantic</option>
+          <option value="hybrid">Hybrid</option>
+        </select>
         <button className="primary" onClick={run}>
           Search
         </button>
@@ -66,6 +72,7 @@ export default function SearchPage() {
                 <th>Spec</th>
                 <th>Project type</th>
                 <th>Section</th>
+                <th>Score</th>
                 <th>Match</th>
               </tr>
             </thead>
@@ -85,7 +92,11 @@ export default function SearchPage() {
                     </Link>
                     <div className="faint mono">{hit.permalink}</div>
                   </td>
-                  <td className="dim">{hit.excerpt}</td>
+                  <td className="mono">{hit.score === undefined ? "—" : hit.score.toFixed(3)}</td>
+                  <td className="dim">
+                    {hit.excerpt}
+                    <div className="faint">{hit.match_type ?? "fts"} · {hit.explanation ?? "Matched indexed spec content."}</div>
+                  </td>
                 </tr>
               ))}
             </tbody>

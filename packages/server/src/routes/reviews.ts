@@ -7,7 +7,7 @@ import { enforceRequiredReviewers } from "../lib/auth.js";
 import { actorFrom, recordAudit } from "../lib/auditLog.js";
 import { dispatchWebhooks } from "../lib/events.js";
 import { enqueueSyncJobs, processSyncJobs } from "../lib/github.js";
-import { reindexSpec } from "../lib/search.js";
+import { reindexSpecSearch } from "../lib/search.js";
 import { getAppKeyConfig } from "../lib/appKeys.js";
 import { reviewImpact } from "../lib/reviewImpact.js";
 import { migrationChecklist, specChangeSummaryMarkdown } from "../lib/specChangeSummary.js";
@@ -232,7 +232,7 @@ export async function reviewRoutes(app: FastifyInstance): Promise<void> {
 
     const updated = requireSpec(app.db, spec.id);
     if (channel === "stable") {
-      reindexSpec(app.db, updated);
+      await reindexSpecSearch(app.db, updated);
       const queued = enqueueSyncJobs(app.db, updated);
       const githubToken = getAppKeyConfig(app.db).github_token;
       if (queued > 0 && githubToken) {

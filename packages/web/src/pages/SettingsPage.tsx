@@ -6,6 +6,8 @@ import {
   type AuditLogRow,
   type ApiKeyRow,
   type ApprovalPolicyRow,
+  type EmbeddingConfig,
+  type EmbeddingStatus,
   type LdapConfig,
   type LlmConfig,
   type McpGuide,
@@ -29,6 +31,8 @@ export default function SettingsPage() {
   const [keys, setKeys] = useState<ApiKeyRow[]>([]);
   const [ldap, setLdap] = useState<LdapConfig>();
   const [llm, setLlm] = useState<LlmConfig>();
+  const [embedding, setEmbedding] = useState<EmbeddingConfig>();
+  const [embeddingStatus, setEmbeddingStatus] = useState<EmbeddingStatus>();
   const [appKeys, setAppKeys] = useState<AppKeyConfig>();
   const [mcpGuide, setMcpGuide] = useState<McpGuide>();
   const [policies, setPolicies] = useState<ApprovalPolicyRow[]>([]);
@@ -37,6 +41,7 @@ export default function SettingsPage() {
   const [issuedToken, setIssuedToken] = useState<string>();
   const [ldapNotice, setLdapNotice] = useState<string>();
   const [llmNotice, setLlmNotice] = useState<string>();
+  const [embeddingNotice, setEmbeddingNotice] = useState<string>();
   const [appKeyNotice, setAppKeyNotice] = useState<string>();
   const [llmModels, setLlmModels] = useState<string[]>([]);
   const [llmTestStatus, setLlmTestStatus] = useState<"idle" | "running" | "ok" | "error">("idle");
@@ -59,6 +64,7 @@ export default function SettingsPage() {
   const [ldapTestPassword, setLdapTestPassword] = useState("");
   const [ldapGroups, setLdapGroups] = useState("");
   const [llmApiKey, setLlmApiKey] = useState("");
+  const [embeddingApiKey, setEmbeddingApiKey] = useState("");
   const [llmTestPrompt, setLlmTestPrompt] = useState("Reply with ok.");
   const [githubToken, setGithubToken] = useState("");
   const [githubWebhookSecret, setGithubWebhookSecret] = useState("");
@@ -80,11 +86,13 @@ export default function SettingsPage() {
       api.apiKeys(),
       api.ldapConfig(),
       api.llmConfig(),
+      api.embeddingConfig(),
+      api.embeddingStatus(),
       api.appKeys(),
       api.approvalPolicies(),
       api.auditLog(50),
     ])
-      .then(([w, s, c, j, t, u, k, l, llmConfig, appKeyConfig, p, a]) => {
+      .then(([w, s, c, j, t, u, k, l, llmConfig, embeddingConfig, nextEmbeddingStatus, appKeyConfig, p, a]) => {
         setWebhooks(w);
         setSubs(s);
         setConsumers(c);
@@ -94,6 +102,8 @@ export default function SettingsPage() {
         setKeys(k);
         setLdap(l);
         setLlm(llmConfig);
+        setEmbedding(embeddingConfig);
+        setEmbeddingStatus(nextEmbeddingStatus);
         setAppKeys(appKeyConfig);
         setPolicies(p);
         setAuditRows(a);
@@ -131,6 +141,19 @@ export default function SettingsPage() {
     });
     setLlm(saved);
     setLlmApiKey("");
+    return saved;
+  }
+
+  async function saveCurrentEmbedding(config: EmbeddingConfig): Promise<EmbeddingConfig> {
+    const saved = await api.updateEmbeddingConfig({
+      provider: config.provider,
+      model: config.model,
+      base_url: config.base_url,
+      dimensions: config.dimensions,
+      api_key: embeddingApiKey || undefined,
+    });
+    setEmbedding(saved);
+    setEmbeddingApiKey("");
     return saved;
   }
 
@@ -441,6 +464,127 @@ export default function SettingsPage() {
               </div>
             </div>
           </>
+        )}
+      </div>
+
+      <div className="section">
+        <h2>Semantic search</h2>
+        {embedding && embeddingStatus && (
+          <div className="card">
+            {embeddingNotice && <div style={{ marginBottom: 12 }}>{embeddingNotice}</div>}
+            <div className="form-row">
+              <select
+                value={embedding.provider}
+                onChange={(e) => setEmbedding({ ...embedding, provider: e.target.value as EmbeddingConfig["provider"] })}
+              >
+                <option value="local_hash">Local deterministic</option>
+                <option value="openai">OpenAI</option>
+                <option value="gemini">Gemini</option>
+                <option value="openai_compatible">OpenAI-compatible / local</option>
+              </select>
+              <input
+                type="text"
+                value={embedding.model}
+                placeholder={
+                  embedding.provider === "openai"
+                    ? "text-embedding-3-small"
+                    : embedding.provider === "gemini"
+                      ? "gemini-embedding-001"
+                      : embedding.provider === "openai_compatible"
+                        ? "nomic-embed-text"
+                        : "local-hash-v1"
+                }
+                style={{ minWidth: 240 }}
+                onChange={(e) => setEmbedding({ ...embedding, model: e.target.value })}
+              />
+              <input
+                type="number"
+                min={16}
+                value={embedding.dimensions}
+                style={{ width: 110 }}
+                onChange={(e) => setEmbedding({ ...embedding, dimensions: Number(e.target.value) })}
+              />
+              <button
+                className="primary"
+                onClick={() =>
+                  act(async () => {
+                    await saveCurrentEmbedding(embedding);
+                    const status = await api.embeddingStatus();
+                    setEmbeddingStatus(status);
+                    setEmbeddingNotice("Embedding settings saved.");
+                  }, false)
+                }
+              >
+                Save embeddings
+              </button>
+              <button
+                onClick={() =>
+                  act(async () => {
+                    await saveCurrentEmbedding(embedding);
+                    const result = await api.reindexEmbeddings();
+                    setEmbeddingStatus(result.status);
+                    setEmbeddingNotice(`Semantic index updated: ${result.indexed_sections} changed section(s).`);
+                  }, false)
+                }
+              >
+                Reindex
+              </button>
+            </div>
+            <div className="form-row">
+              <input
+                type="text"
+                placeholder={
+                  embedding.provider === "openai"
+                    ? "Optional OpenAI-compatible proxy URL"
+                    : embedding.provider === "gemini"
+                      ? "Optional Gemini API base URL"
+                      : embedding.provider === "openai_compatible"
+                        ? "http://localhost:11434/v1 or http://embedding-gateway.internal/v1"
+                        : "Not used by local deterministic embeddings"
+                }
+                value={embedding.base_url}
+                style={{ flex: 1, minWidth: 360 }}
+                onChange={(e) => setEmbedding({ ...embedding, base_url: e.target.value })}
+              />
+              <input
+                type="password"
+                placeholder={embedding.has_api_key ? "Stored embedding API key" : "Embedding API key, optional for local"}
+                value={embeddingApiKey}
+                onChange={(e) => setEmbeddingApiKey(e.target.value)}
+              />
+              {embedding.has_api_key && (
+                <button
+                  className="danger"
+                  onClick={() =>
+                    act(async () => {
+                      const saved = await api.updateEmbeddingConfig({ clear_api_key: true });
+                      setEmbedding(saved);
+                      setEmbeddingNotice("Embedding API key cleared.");
+                    }, false)
+                  }
+                >
+                  Clear key
+                </button>
+              )}
+            </div>
+            <div className="cards" style={{ marginTop: 12 }}>
+              <div className={`card${embeddingStatus.ready ? "" : " alert"}`}>
+                <div className="label">Index status</div>
+                <div><StatusBadge status={embeddingStatus.ready ? "approved" : "pending"} /> {embeddingStatus.provider}/{embeddingStatus.model}</div>
+              </div>
+              <div className="card">
+                <div className="label">Indexed sections</div>
+                <div className="mono">{embeddingStatus.indexed_sections}/{embeddingStatus.published_sections}</div>
+              </div>
+              <div className="card">
+                <div className="label">Last indexed</div>
+                <div className="faint">{embeddingStatus.last_indexed_at ? timeAgo(embeddingStatus.last_indexed_at) : "never"}</div>
+              </div>
+            </div>
+            <div className="faint">
+              Semantic and hybrid search use section-level embeddings. Local deterministic mode needs no network; OpenAI-compatible mode supports local embedding servers and internal gateways.
+            </div>
+          </div>
         )}
       </div>
 

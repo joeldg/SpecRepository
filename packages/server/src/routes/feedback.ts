@@ -9,7 +9,7 @@ import { auditCodebase, runEfficacy, type AuditInput } from "../lib/audit.js";
 import { createChangeRequest } from "../lib/changes.js";
 import { uuid as makeId } from "../db.js";
 import { dispatchWebhooks, recordUsage } from "../lib/events.js";
-import { searchSpecs } from "../lib/search.js";
+import { searchSpecsByMode, type SearchMode } from "../lib/search.js";
 import { splitSections } from "../lib/sections.js";
 import { bundleSpecs } from "../lib/compile.js";
 
@@ -101,10 +101,11 @@ export async function feedbackRoutes(app: FastifyInstance): Promise<void> {
     return app.db.prepare("SELECT * FROM agent_feedback WHERE id = ?").get(id);
   });
 
-  // Lexical RAG endpoint: section-level search over published specs.
+  // RAG endpoint: section-level FTS, semantic, or hybrid search over published specs.
   app.get("/ai/search", async (req) => {
-    const { q, project_type, project_id, repo } = req.query as { q?: string; project_type?: string; project_id?: string; repo?: string };
+    const { q, project_type, project_id, repo, mode } = req.query as { q?: string; project_type?: string; project_id?: string; repo?: string; mode?: string };
     if (!q || !q.trim()) throw new HttpError(400, "Missing query parameter: q");
+    const searchMode: SearchMode = mode === "semantic" || mode === "hybrid" || mode === "fts" ? mode : "fts";
     const pt = project_type ? requireProjectType(app.db, project_type) : undefined;
     const project = pt
       ? project_id
@@ -114,7 +115,7 @@ export async function feedbackRoutes(app: FastifyInstance): Promise<void> {
           : undefined
       : undefined;
     recordUsage(app.db, "search", pt?.id, q);
-    return { query: q, project: project?.repo ?? null, results: searchSpecs(app.db, q, pt?.id, 20, project?.id) };
+    return { query: q, mode: searchMode, project: project?.repo ?? null, results: await searchSpecsByMode(app.db, q, searchMode, pt?.id, 20, project?.id) };
   });
 
   // Close the loop: have the configured server LLM draft a revision that resolves the feedback,

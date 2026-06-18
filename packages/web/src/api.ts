@@ -277,6 +277,9 @@ export interface SearchHit {
   section_anchor: string;
   permalink: string;
   excerpt: string;
+  score?: number;
+  match_type?: "fts" | "semantic" | "hybrid";
+  explanation?: string;
 }
 export interface UserRow {
   id: string;
@@ -313,6 +316,22 @@ export interface LlmConfig {
   base_url: string;
   max_tokens: number;
   has_api_key: boolean;
+}
+export interface EmbeddingConfig {
+  provider: "local_hash" | "openai" | "gemini" | "openai_compatible";
+  model: string;
+  base_url: string;
+  dimensions: number;
+  has_api_key: boolean;
+}
+export interface EmbeddingStatus {
+  provider: string;
+  model: string;
+  dimensions: number;
+  indexed_sections: number;
+  published_sections: number;
+  last_indexed_at: string | null;
+  ready: boolean;
 }
 export interface AppKeyConfig {
   has_github_token: boolean;
@@ -481,9 +500,9 @@ export const api = {
   draftFix: (feedbackId: string) =>
     request<ChangeRequest>(`/api/v1/ai/feedback/${feedbackId}/draft-fix`, { method: "POST", body: JSON.stringify({}) }),
 
-  search: (q: string, projectType?: string) =>
-    request<{ query: string; results: SearchHit[] }>(
-      `/api/v1/ai/search?q=${encodeURIComponent(q)}${projectType ? `&project_type=${encodeURIComponent(projectType)}` : ""}`
+  search: (q: string, projectType?: string, mode: "fts" | "semantic" | "hybrid" = "fts") =>
+    request<{ query: string; mode: string; results: SearchHit[] }>(
+      `/api/v1/ai/search?q=${encodeURIComponent(q)}&mode=${encodeURIComponent(mode)}${projectType ? `&project_type=${encodeURIComponent(projectType)}` : ""}`
     ),
 
   templates: () => request<SpecTemplate[]>("/api/v1/templates"),
@@ -560,6 +579,15 @@ export const api = {
       body: JSON.stringify({ prompt, max_tokens }),
     }),
   llmModels: () => request<{ provider: string; models: string[] }>("/api/v1/llm/models"),
+  embeddingConfig: () => request<EmbeddingConfig>("/api/v1/embeddings/config"),
+  updateEmbeddingConfig: (body: Partial<Omit<EmbeddingConfig, "has_api_key">> & { api_key?: string; clear_api_key?: boolean }) =>
+    request<EmbeddingConfig>("/api/v1/embeddings/config", { method: "PUT", body: JSON.stringify(body) }),
+  embeddingStatus: () => request<EmbeddingStatus>("/api/v1/embeddings/status"),
+  reindexEmbeddings: () =>
+    request<{ indexed_sections: number; provider: string; model: string; status: EmbeddingStatus }>("/api/v1/embeddings/reindex", {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
   appKeys: () => request<AppKeyConfig>("/api/v1/app-keys"),
   updateAppKeys: (
     body: Partial<{

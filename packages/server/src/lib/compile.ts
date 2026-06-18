@@ -47,7 +47,7 @@ These rules govern how you use this compiled file with SpecRegistry:
 1. Prefer MCP when available. Use the \`specregistry\` MCP server from \`.mcp.json\` to call \`get_specs\`, \`search_specs\`, \`report_spec_feedback\`, and \`get_audit_prompt\`.
 2. Load live specs before non-trivial code changes. This compiled file is a bootstrap, but MCP is the live retrieval and feedback channel.
 3. Preserve project scope. Ensure MCP is using the configured project type and repo/project identity so global, project-type, and project-scoped specs are all visible.
-4. Search before assuming. Use \`search_specs\` for task terms, APIs, filenames, security concerns, failure modes, and acceptance criteria before deciding guidance is missing.
+4. Search before assuming. Use \`search_specs\` in hybrid mode for task terms, APIs, filenames, security concerns, failure modes, and acceptance criteria before deciding guidance is missing.
 5. Do not edit generated governance files by hand. Refresh \`CLAUDE.md\`, \`AGENTS.md\`, \`.cursorrules\`, and governed \`specs/\` content with \`specreg sync\` or \`specreg compile\`.
 6. Treat spec drift as a blocker. If local specs appear stale, ask for or run \`specreg check\` / \`specreg sync\` before relying on them.
 7. Report spec problems through SpecRegistry. If guidance is unclear, incomplete, contradictory, or outdated, call \`report_spec_feedback\` instead of guessing.

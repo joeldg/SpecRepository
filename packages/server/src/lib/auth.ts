@@ -273,7 +273,7 @@ const PUBLIC_PATHS = [
 const POLICIES: Array<{ method: RegExp; path: RegExp; min: Role }> = [
   { method: /POST/, path: /^\/api\/v1\/reviews\/[^/]+\/(approve|reject)$/, min: "reviewer" },
   { method: /POST/, path: /^\/api\/v1\/specs\/[^/]+\/promote$/, min: "reviewer" },
-  { method: /GET|POST|PUT|DELETE/, path: /^\/api\/v1\/(ldap|llm|app-keys)(\/|$)/, min: "admin" },
+  { method: /GET|POST|PUT|DELETE/, path: /^\/api\/v1\/(ldap|llm|embeddings|app-keys)(\/|$)/, min: "admin" },
   { method: /GET/, path: /^\/api\/v1\/audit-log$/, min: "admin" },
   { method: /GET/, path: /^\/api\/v1\/cli\/consumers$/, min: "admin" },
   { method: /POST/, path: /^\/api\/v1\/cli\/manifest-report$/, min: "agent" },

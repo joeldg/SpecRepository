@@ -71,6 +71,8 @@ Every governed repository should follow this workflow.
 4. **Implement**
    Work proceeds against the active spec set. When specs are unclear, agents should call `report_spec_feedback` rather than guess.
    Search and agent-spec responses include section anchors/permalinks so feedback and audit findings can cite the exact governing section.
+   For larger spec packs, agents should prefer hybrid search so exact FTS5 matches and
+   section-level semantic matches are both considered under the task's context budget.
 
 5. **Audit**
    Use reverse conformance audit (`specreg audit` or `POST /api/v1/ai/audit`) to check whether the implementation follows the governed specs.

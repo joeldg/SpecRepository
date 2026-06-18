@@ -177,6 +177,20 @@ CREATE VIRTUAL TABLE IF NOT EXISTS spec_chunks USING fts5(
   content
 );
 
+CREATE TABLE IF NOT EXISTS spec_embeddings (
+  spec_id TEXT NOT NULL REFERENCES specs(id) ON DELETE CASCADE,
+  section TEXT NOT NULL,
+  section_anchor TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  model TEXT NOT NULL,
+  dimensions INTEGER NOT NULL,
+  vector TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (spec_id, section_anchor, provider, model)
+);
+CREATE INDEX IF NOT EXISTS idx_spec_embeddings_provider_model ON spec_embeddings(provider, model);
+
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   username TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -348,6 +362,24 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
     `,
   },
   { version: 12, sql: "ALTER TABLE change_requests ADD COLUMN risk TEXT" },
+  {
+    version: 13,
+    sql: `
+      CREATE TABLE IF NOT EXISTS spec_embeddings (
+        spec_id TEXT NOT NULL REFERENCES specs(id) ON DELETE CASCADE,
+        section TEXT NOT NULL,
+        section_anchor TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        dimensions INTEGER NOT NULL,
+        vector TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (spec_id, section_anchor, provider, model)
+      );
+      CREATE INDEX IF NOT EXISTS idx_spec_embeddings_provider_model ON spec_embeddings(provider, model);
+    `,
+  },
 ];
 
 export function createDb(path: string): Db {
