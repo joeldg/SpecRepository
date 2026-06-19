@@ -18,10 +18,18 @@
 
 - [x] Spec impact analysis before approval/publish, including affected manifest consumers,
   repo subscriptions, downstream spec references, feedback, recent usage, and risk level.
+- LLM-assisted contradiction detection: current contradiction reports use deterministic
+  normative-statement heuristics. Add an optional LLM/semantic pass that can catch
+  paraphrased conflicts, policy collisions, and intent-level contradictions before review.
 
 ## Quality and Safety
 
-- No open items.
+- Persisted prompt regression suites: the `/ai/regression-suite` endpoint runs prompts
+  on demand, but it does not yet store suites, baselines, expected outcomes, model/spec
+  version comparisons, or pass/fail history in the UI.
+- Scheduled efficacy runner: the current scheduled-run endpoint is an on-demand batch.
+  Add real schedules with cadence, ownership, retries, last-run status, result history,
+  and notifications.
 
 ## Developer Workflow
 
@@ -43,6 +51,12 @@
 ## AI Feedback and Efficacy
 
 - [ ] Semantic Drift Pipeline: Compute the vector distance between the structural intent of new code and the established architecture. Includes AST/LLM architectural summarization of codebase changes in CI, vector embedding generation, and cosine distance comparison against active spec vectors to output a telemetry drift score (0.0 to 1.0) pushed to the `/metrics` scraper.
+- Code/AST embedding profile: add a separate embedding configuration for parsed code
+  symbols, module summaries, dependency edges, API shapes, and architectural intent so
+  AST drift and code-to-spec matching can use different models from spec text search.
+- Code-to-spec coverage reports: use AST extraction plus embeddings to show which files,
+  modules, routes, APIs, or schemas are governed by which specs, and where code has no
+  matching spec coverage.
 
 ## Enterprise
 
