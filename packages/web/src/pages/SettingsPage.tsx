@@ -24,6 +24,13 @@ import { StatusBadge, timeAgo } from "../components";
 
 const WEBHOOK_EVENTS = ["spec.published", "review.submitted", "review.approved", "review.rejected", "feedback.created"];
 const LLM_TIERS: LlmTier[] = ["cheap", "standard", "frontier"];
+type SettingsTab = "ai" | "access" | "governance" | "integrations";
+const SETTINGS_TABS: Array<{ id: SettingsTab; label: string; description: string }> = [
+  { id: "ai", label: "AI & Search", description: "Choose models, route AI work, and manage agent context and semantic indexing." },
+  { id: "access", label: "Access", description: "Manage people, machine credentials, and directory-based authentication." },
+  { id: "governance", label: "Governance", description: "Control approvals and inspect the projects and events governed by this registry." },
+  { id: "integrations", label: "Integrations", description: "Connect external services and distribute approved specs to subscribed repositories." },
+];
 const LLM_ROUTES: Array<{ route: LlmTaskRoute; label: string; defaultTier: LlmTier }> = [
   { route: "classification", label: "Classification", defaultTier: "cheap" },
   { route: "summarization", label: "Summarization", defaultTier: "cheap" },
@@ -52,6 +59,7 @@ function baseUrlPlaceholder(provider: LlmConfig["provider"]): string {
 }
 
 export default function SettingsPage() {
+  const [activeTab, setActiveTab] = useState<SettingsTab>("ai");
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
   const [subs, setSubs] = useState<SubscriptionRow[]>([]);
   const [consumers, setConsumers] = useState<RepoConsumerRow[]>([]);
@@ -199,12 +207,32 @@ export default function SettingsPage() {
     <>
       <div className="page-head">
         <h1>Settings</h1>
-        <span className="sub">Notifications and git distribution</span>
+        <span className="sub">Configure the registry and its connected services</span>
       </div>
       {error && <div className="error-banner">{error}</div>}
 
-      <div className="section">
+      <div className="settings-tabs" role="tablist" aria-label="Settings sections">
+        {SETTINGS_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            aria-controls="settings-panel"
+            className={activeTab === tab.id ? "active" : ""}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      <div className="settings-tab-intro" id="settings-panel" role="tabpanel">
+        {SETTINGS_TABS.find((tab) => tab.id === activeTab)?.description}
+      </div>
+
+      <div className={`section${activeTab === "access" ? "" : " settings-hidden"}`}>
         <h2>Users and API keys</h2>
+        <p className="settings-help">Create human identities and issue revocable bearer tokens for CLI, MCP, and API clients.</p>
         <div className="card" style={{ marginBottom: 12 }}>
           <div className="form-row">
             <input type="text" placeholder="Username" value={newUsername} onChange={(e) => setNewUsername(e.target.value)} />
@@ -332,8 +360,9 @@ export default function SettingsPage() {
         )}
       </div>
 
-      <div className="section">
+      <div className={`section${activeTab === "ai" ? "" : " settings-hidden"}`}>
         <h2>LLM routing</h2>
+        <p className="settings-help">Assign providers and models by cost and capability, then route each AI task to the appropriate tier.</p>
         {llmTiering && (
           <>
             {llmNotice && (
@@ -631,8 +660,9 @@ export default function SettingsPage() {
         )}
       </div>
 
-      <div className="section">
+      <div className={`section${activeTab === "ai" ? "" : " settings-hidden"}`}>
         <h2>Semantic search</h2>
+        <p className="settings-help">Configure section embeddings used to retrieve relevant spec context for semantic and hybrid search.</p>
         {embedding && embeddingStatus && (
           <div className="card">
             {embeddingNotice && <div style={{ marginBottom: 12 }}>{embeddingNotice}</div>}
@@ -752,8 +782,9 @@ export default function SettingsPage() {
         )}
       </div>
 
-      <div className="section">
+      <div className={`section${activeTab === "integrations" ? "" : " settings-hidden"}`}>
         <h2>App keys</h2>
+        <p className="settings-help">Store service credentials used for GitHub automation and verification of signed inbound requests.</p>
         {appKeys && (
           <div className="card">
             {appKeyNotice && <div style={{ marginBottom: 12 }}>{appKeyNotice}</div>}
@@ -857,8 +888,9 @@ export default function SettingsPage() {
         )}
       </div>
 
-      <div className="section">
+      <div className={`section${activeTab === "access" ? "" : " settings-hidden"}`}>
         <h2>LDAP</h2>
+        <p className="settings-help">Connect a directory, map groups to registry roles, and test authentication before enabling it for users.</p>
         {ldap && (
           <>
             {ldapNotice && (
@@ -1006,8 +1038,9 @@ export default function SettingsPage() {
         )}
       </div>
 
-      <div className="section">
+      <div className={`section${activeTab === "ai" ? "" : " settings-hidden"}`}>
         <h2>Agent MCP guide</h2>
+        <p className="settings-help">Preview the discovery guide and download a project-type agent pack with governed MCP instructions.</p>
         <div className="card">
           <div className="form-row">
             <select value={mcpTypeName} onChange={(e) => setMcpTypeName(e.target.value)}>
@@ -1038,8 +1071,9 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="section">
+      <div className={`section${activeTab === "governance" ? "" : " settings-hidden"}`}>
         <h2>Approval policies</h2>
+        <p className="settings-help">Require a minimum number of approvals or named reviewers before matching spec changes can publish.</p>
         <div className="card" style={{ marginBottom: 12 }}>
           <div className="form-row">
             <select value={policyTypeId} onChange={(e) => setPolicyTypeId(e.target.value)}>
@@ -1115,8 +1149,9 @@ export default function SettingsPage() {
         )}
       </div>
 
-      <div className="section">
+      <div className={`section${activeTab === "governance" ? "" : " settings-hidden"}`}>
         <h2>Audit log</h2>
+        <p className="settings-help">Review recent administrative and governance actions with their actor, time, and outcome.</p>
         {auditRows.length === 0 ? (
           <div className="empty">No audit events yet.</div>
         ) : (
@@ -1143,8 +1178,9 @@ export default function SettingsPage() {
         )}
       </div>
 
-      <div className="section">
+      <div className={`section${activeTab === "integrations" ? "" : " settings-hidden"}`}>
         <h2>Webhooks</h2>
+        <p className="settings-help">Notify automation, Slack, or Google Chat when important review, publication, and feedback events occur.</p>
         <div className="card" style={{ marginBottom: 12 }}>
           <div className="form-row">
             <input
@@ -1198,8 +1234,9 @@ export default function SettingsPage() {
         )}
       </div>
 
-      <div className="section">
+      <div className={`section${activeTab === "governance" ? "" : " settings-hidden"}`}>
         <h2>Projects</h2>
+        <p className="settings-help">See which repositories report manifests, which project type governs them, and whether their specs are current.</p>
         {consumers.length === 0 ? (
           <div className="empty">No projects have reported a local spec manifest yet.</div>
         ) : (
@@ -1235,8 +1272,9 @@ export default function SettingsPage() {
         )}
       </div>
 
-      <div className="section">
+      <div className={`section${activeTab === "integrations" ? "" : " settings-hidden"}`}>
         <h2>Repo subscriptions (git push-back)</h2>
+        <p className="settings-help">Subscribe repositories to approved spec changes so the registry can open synchronized update pull requests.</p>
         <div className="card" style={{ marginBottom: 12 }}>
           <div className="form-row">
             <select value={subTypeId} onChange={(e) => setSubTypeId(e.target.value)}>
@@ -1296,13 +1334,14 @@ export default function SettingsPage() {
         )}
       </div>
 
-      <div className="section">
+      <div className={`section${activeTab === "integrations" ? "" : " settings-hidden"}`}>
         <h2>
           Sync jobs{" "}
           <button style={{ marginLeft: 8 }} onClick={() => act(() => api.runSyncJobs())}>
             Run pending
           </button>
         </h2>
+        <p className="settings-help">Monitor and retry queued repository updates created when subscribed specifications are approved.</p>
         {jobs.length === 0 ? (
           <div className="empty">No sync jobs yet — approve a spec change for a subscribed project type.</div>
         ) : (
