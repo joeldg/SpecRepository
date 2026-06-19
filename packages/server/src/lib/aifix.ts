@@ -57,6 +57,7 @@ ${feedback.description}`;
     system: SYSTEM,
     user: userMessage,
     maxTokens: 16000,
+    route: "draft_fix",
   });
   return sanitizeDraftFixOutput(text, spec.content);
 }

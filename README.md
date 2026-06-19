@@ -760,6 +760,8 @@ GET/POST /api/v1/auth/users             GET/POST/DELETE /api/v1/auth/api-keys
 GET/PUT /api/v1/ldap/config             POST /api/v1/ldap/test · POST /api/v1/ldap/role-preview
 GET  /api/v1/audit-log
 GET/PUT /api/v1/llm/config             POST /api/v1/llm/test
+GET  /api/v1/llm/tiering               PUT /api/v1/llm/tiering/tier/:tier
+PUT  /api/v1/llm/tiering/routes        GET /api/v1/llm/models/:tier
 GET/PUT /api/v1/embeddings/config      GET/POST /api/v1/embeddings/status|reindex
 POST /api/v1/integrations/github/webhook   POST /api/v1/integrations/slack/actions
 GET  /metrics
@@ -794,6 +796,10 @@ map roles with `LDAP_ADMIN_GROUP` / `LDAP_REVIEWER_GROUP`.
 | `LLM_BASE_URL` | Anthropic proxy or OpenAI-compatible local/network endpoint |
 | `LLM_API_KEY` | Server LLM API key; optional for some local endpoints |
 | `LLM_MAX_TOKENS` | Default server LLM token budget |
+| `LLM_LOCAL_BASE_URL` / `LLM_CHEAP_BASE_URL` | Default cheap-tier local/network OpenAI-compatible endpoint |
+| `LLM_LOCAL_MODEL` / `LLM_CHEAP_MODEL` | Default cheap-tier model |
+| `LLM_CHEAP_API_KEY`, `LLM_CHEAP_MAX_TOKENS` | Optional cheap-tier API key and token budget |
+| `LLM_FRONTIER_MODEL`, `LLM_FRONTIER_MAX_TOKENS` | Optional frontier-tier model and token budget overrides |
 | `EMBEDDING_PROVIDER` | Semantic search provider: `local_hash`, `openai`, `gemini`, or `openai_compatible` |
 | `EMBEDDING_MODEL` | Embedding model name |
 | `EMBEDDING_BASE_URL` | OpenAI-compatible local/network embedding endpoint or hosted proxy |
@@ -855,8 +861,20 @@ SPECREG_GENERATE_BASE_URL=http://localhost:11434/v1
 
 ### Server LLM providers
 
-Server-side LLM features include AI draft-fix, reverse conformance audit, and spec efficacy
-tests. Configure them on the Settings page or with environment variables.
+Server-side LLM features include AI draft-fix, reverse conformance audit, spec efficacy,
+and LLM-backed automation. Configure them on the Settings page or with environment
+variables.
+
+The Settings page uses three configurable tiers:
+
+- **Cheap / local**: default for classification, summarization, and task planning.
+- **Standard**: default for ticket generation, maintenance suggestions, and connectivity tests.
+- **Frontier**: default for spec generation, final audits, AI draft fixes, and efficacy scoring.
+
+Each tier can use a different provider, model, base URL, API key, and max-token budget.
+The routing table lets admins remap each feature to `cheap`, `standard`, or `frontier`
+without changing code. The older `/api/v1/llm/config` endpoint still configures the
+standard tier for compatibility.
 
 Anthropic example:
 
@@ -889,6 +907,18 @@ LLM_PROVIDER=openai_compatible
 LLM_MODEL=llama3.1
 LLM_BASE_URL=http://ollama.internal:11434/v1
 LLM_API_KEY=
+```
+
+Cheap-tier local model with a hosted frontier model:
+
+```dotenv
+LLM_PROVIDER=anthropic
+LLM_MODEL=claude-sonnet-4-5
+ANTHROPIC_API_KEY=sk-ant-...
+LLM_LOCAL_BASE_URL=http://host.docker.internal:1234
+LLM_LOCAL_MODEL=google/gemma-4-12b-qat
+LLM_CHEAP_MAX_TOKENS=4000
+LLM_FRONTIER_MODEL=claude-opus-4-8
 ```
 
 From Docker Compose on macOS/Windows, use `host.docker.internal` to reach a model server

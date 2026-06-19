@@ -11,7 +11,21 @@ import {
 } from "../lib/auth.js";
 import { actorFrom, recordAudit } from "../lib/auditLog.js";
 import { processSyncJobs } from "../lib/github.js";
-import { listLlmModels, publicLlmConfig, runLlmText, saveLlmConfig, type LlmConfig } from "../lib/llm.js";
+import {
+  listLlmModels,
+  LLM_ROUTE_VALUES,
+  LLM_TIER_VALUES,
+  publicLlmConfig,
+  publicLlmTierConfig,
+  publicLlmTieringConfig,
+  runLlmText,
+  saveLlmConfig,
+  saveLlmRoutes,
+  saveLlmTierConfig,
+  type LlmConfig,
+  type LlmTaskRoute,
+  type LlmTier,
+} from "../lib/llm.js";
 import { getAppKeyConfig, publicAppKeyConfig, saveAppKeyConfig, type AppKeyConfig } from "../lib/appKeys.js";
 import {
   publicEmbeddingConfig,
@@ -20,6 +34,14 @@ import {
   semanticIndexStatus,
   type EmbeddingConfig,
 } from "../lib/embeddings.js";
+
+function isLlmTier(value: unknown): value is LlmTier {
+  return typeof value === "string" && LLM_TIER_VALUES.includes(value as LlmTier);
+}
+
+function isLlmRoute(value: unknown): value is LlmTaskRoute {
+  return typeof value === "string" && LLM_ROUTE_VALUES.includes(value as LlmTaskRoute);
+}
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
   // --- App keys / integration secrets ---
@@ -68,16 +90,64 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const prompt = typeof body.prompt === "string" && body.prompt.trim() ? body.prompt.trim() : "Reply with: ok";
     const maxTokens = Math.max(1, Math.min(100000, Number(body.max_tokens ?? 200) || 200));
+    const route = isLlmRoute(body.route) ? body.route : "test";
+    const tier = isLlmTier(body.tier) ? body.tier : undefined;
     const result = await runLlmText(app.db, {
       system: "You are a connectivity test for SpecRegistry. Reply briefly.",
       user: prompt,
       maxTokens,
+      route,
+      tier,
     });
-    return { ok: true, provider: result.provider, model: result.model, text: result.text, max_tokens: maxTokens };
+    return { ok: true, provider: result.provider, model: result.model, tier: result.tier, route: result.route, text: result.text, max_tokens: maxTokens };
   });
 
   app.get("/llm/models", async () => {
     return listLlmModels(app.db);
+  });
+
+  app.get("/llm/tiering", async () => {
+    return publicLlmTieringConfig(app.db);
+  });
+
+  app.put("/llm/tiering/tier/:tier", async (req) => {
+    const { tier } = req.params as { tier: string };
+    if (!isLlmTier(tier)) throw new HttpError(400, "tier must be cheap, standard, or frontier");
+    const body = (req.body ?? {}) as Partial<LlmConfig> & { clear_api_key?: boolean };
+    const saved = publicLlmTierConfig(app.db, tier, saveLlmTierConfig(app.db, tier, body));
+    recordAudit(app.db, {
+      actor: actorFrom(req, "settings"),
+      action: "llm.tier.updated",
+      target_type: "llm",
+      target_id: tier,
+      summary: `${saved.label} LLM tier updated`,
+      detail: { tier, provider: saved.provider, model: saved.model, base_url: saved.base_url, has_api_key: saved.has_api_key },
+    });
+    return saved;
+  });
+
+  app.put("/llm/tiering/routes", async (req) => {
+    const body = (req.body ?? {}) as { routes?: Partial<Record<LlmTaskRoute, LlmTier>> };
+    const requested = body.routes ?? {};
+    for (const [route, tier] of Object.entries(requested)) {
+      if (!isLlmRoute(route)) throw new HttpError(400, `unknown LLM route: ${route}`);
+      if (!isLlmTier(tier)) throw new HttpError(400, `route ${route} must map to cheap, standard, or frontier`);
+    }
+    const routes = saveLlmRoutes(app.db, requested);
+    recordAudit(app.db, {
+      actor: actorFrom(req, "settings"),
+      action: "llm.routes.updated",
+      target_type: "llm",
+      summary: "LLM feature routing updated",
+      detail: routes,
+    });
+    return { routes };
+  });
+
+  app.get("/llm/models/:tier", async (req) => {
+    const { tier } = req.params as { tier: string };
+    if (!isLlmTier(tier)) throw new HttpError(400, "tier must be cheap, standard, or frontier");
+    return listLlmModels(app.db, tier);
   });
 
   // --- Embedding provider settings for semantic search ---

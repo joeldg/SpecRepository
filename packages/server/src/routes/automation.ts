@@ -81,6 +81,7 @@ async function buildAuditPrompt(app: FastifyInstance, spec: AutomationSpecInput,
       system: "You improve reverse-conformance audit prompts. Output only the improved prompt.",
       user: prompt,
       maxTokens: 2500,
+      route: "audit",
     });
     return { prompt: llm.text, model: llm.model, provider: llm.provider };
   }
@@ -136,6 +137,7 @@ export async function automationRoutes(app: FastifyInstance): Promise<void> {
       ? await runLlmText(app.db, {
           system: "You generate complete Markdown specification documents. Output only Markdown.",
           user: prompt,
+          route: "spec_generation",
         })
       : null;
     return {
@@ -202,6 +204,7 @@ export async function automationRoutes(app: FastifyInstance): Promise<void> {
         system: "You are an SDD planning assistant. Improve the deterministic task plan without inventing unavailable specs.",
         user: JSON.stringify(plan, null, 2),
         maxTokens: 3000,
+        route: "task_planning",
       });
       return { ...plan, llm_notes: llm.text, model: llm.model, provider: llm.provider };
     }
@@ -223,6 +226,7 @@ export async function automationRoutes(app: FastifyInstance): Promise<void> {
         system: "You write concise implementation tickets from SDD plans. Output Markdown only.",
         user: markdown,
         maxTokens: 3000,
+        route: "ticket_generation",
       });
       markdown = llm.text;
     }
@@ -317,6 +321,7 @@ export async function automationRoutes(app: FastifyInstance): Promise<void> {
         system: "You turn deterministic spec improvement findings into concise prioritized recommendations. Output Markdown only.",
         user: JSON.stringify(suggestions, null, 2),
         maxTokens: 3000,
+        route: "maintenance",
       });
       return { suggestions, llm_notes: llm.text, model: llm.model, provider: llm.provider };
     }
@@ -335,6 +340,7 @@ export async function automationRoutes(app: FastifyInstance): Promise<void> {
         system: "You write a concise README for a reusable SpecRegistry spec pack. Output Markdown only.",
         user: JSON.stringify({ name: pack.name, files: pack.specs.map((spec) => spec.filename) }, null, 2),
         maxTokens: 2000,
+        route: "spec_generation",
       });
       return { ...pack, readme: llm.text, model: llm.model, provider: llm.provider };
     }

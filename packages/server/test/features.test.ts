@@ -585,6 +585,120 @@ describe("LLM settings", () => {
     );
   });
 
+  it("exposes default LLM tiers and lets feature routes pick tier-specific configs", async () => {
+    const defaults = await app.inject({ method: "GET", url: "/api/v1/llm/tiering" });
+    expect(defaults.statusCode).toBe(200);
+    expect(defaults.json().routes).toMatchObject({
+      classification: "cheap",
+      task_planning: "cheap",
+      ticket_generation: "standard",
+      spec_generation: "frontier",
+      draft_fix: "frontier",
+      test: "standard",
+    });
+
+    const cheap = await app.inject({
+      method: "PUT",
+      url: "/api/v1/llm/tiering/tier/cheap",
+      payload: {
+        provider: "openai_compatible",
+        model: "cheap-local",
+        base_url: "http://cheap-llm",
+        max_tokens: 512,
+        clear_api_key: true,
+      },
+    });
+    expect(cheap.statusCode).toBe(200);
+    expect(cheap.json()).toMatchObject({
+      tier: "cheap",
+      provider: "openai_compatible",
+      model: "cheap-local",
+      base_url: "http://cheap-llm",
+      max_tokens: 512,
+      has_api_key: false,
+    });
+
+    const frontier = await app.inject({
+      method: "PUT",
+      url: "/api/v1/llm/tiering/tier/frontier",
+      payload: {
+        provider: "openai_compatible",
+        model: "frontier-local",
+        base_url: "http://frontier-llm/v1",
+        max_tokens: 4096,
+      },
+    });
+    expect(frontier.statusCode).toBe(200);
+
+    const routes = await app.inject({
+      method: "PUT",
+      url: "/api/v1/llm/tiering/routes",
+      payload: { routes: { test: "cheap", audit: "frontier" } },
+    });
+    expect(routes.statusCode).toBe(200);
+    expect(routes.json().routes).toMatchObject({ test: "cheap", audit: "frontier" });
+
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ choices: [{ message: { content: "cheap ok" } }] }), {
+        headers: { "content-type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const test = await app.inject({ method: "POST", url: "/api/v1/llm/test", payload: { prompt: "ping", route: "test" } });
+    expect(test.statusCode).toBe(200);
+    expect(test.json()).toMatchObject({
+      ok: true,
+      provider: "openai_compatible",
+      model: "cheap-local",
+      tier: "cheap",
+      route: "test",
+      text: "cheap ok",
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith("http://cheap-llm/v1/chat/completions", expect.any(Object));
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ choices: [{ message: { content: "frontier ok" } }] }), {
+        headers: { "content-type": "application/json" },
+      })
+    );
+    const audit = await app.inject({ method: "POST", url: "/api/v1/llm/test", payload: { prompt: "ping", route: "audit" } });
+    expect(audit.statusCode).toBe(200);
+    expect(audit.json()).toMatchObject({ model: "frontier-local", tier: "frontier", route: "audit", text: "frontier ok" });
+    expect(fetchMock).toHaveBeenLastCalledWith("http://frontier-llm/v1/chat/completions", expect.any(Object));
+  });
+
+  it("loads model lists from a selected LLM tier", async () => {
+    await app.inject({
+      method: "PUT",
+      url: "/api/v1/llm/tiering/tier/cheap",
+      payload: { provider: "openai_compatible", base_url: "http://tier-models", model: "local-a" },
+    });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: [{ id: "local-a" }, { id: "local-b" }] }), {
+        headers: { "content-type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const models = await app.inject({ method: "GET", url: "/api/v1/llm/models/cheap" });
+    expect(models.statusCode).toBe(200);
+    expect(models.json()).toEqual({ provider: "openai_compatible", models: ["local-a", "local-b"], tier: "cheap" });
+    expect(fetchMock).toHaveBeenCalledWith("http://tier-models/v1/models", expect.any(Object));
+  });
+
+  it("rejects invalid LLM tier routes", async () => {
+    const badTier = await app.inject({ method: "PUT", url: "/api/v1/llm/tiering/tier/turbo", payload: {} });
+    expect(badTier.statusCode).toBe(400);
+
+    const badRoute = await app.inject({
+      method: "PUT",
+      url: "/api/v1/llm/tiering/routes",
+      payload: { routes: { imaginary: "cheap" } },
+    });
+    expect(badRoute.statusCode).toBe(400);
+  });
+
   it("normalizes LM Studio root URLs and accepts local response variants", async () => {
     await app.inject({
       method: "PUT",

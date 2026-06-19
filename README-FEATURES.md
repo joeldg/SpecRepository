@@ -300,7 +300,17 @@ Automation capabilities can be enabled or disabled with `SPECREG_AUTOMATION_*` e
 
 ### Server LLM Settings
 
-The Settings page supports configuring:
+The Settings page supports configuring three LLM tiers:
+
+- cheap/local for classification, summarization, and planning
+- standard for general automation
+- frontier for spec generation, audits, draft fixes, and efficacy scoring
+
+Each tier has its own provider, model, base URL, API key, token budget, model loader, and
+connectivity test. A routing table maps product features to tiers so admins can move tasks
+between local/network models and hosted frontier models without code changes.
+
+Supported providers:
 
 - Anthropic
 - OpenAI

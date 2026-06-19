@@ -10,6 +10,9 @@ import {
   type EmbeddingStatus,
   type LdapConfig,
   type LlmConfig,
+  type LlmTaskRoute,
+  type LlmTier,
+  type LlmTieringConfig,
   type McpGuide,
   type ProjectTypeWithCount,
   type RepoConsumerRow,
@@ -20,6 +23,33 @@ import {
 import { StatusBadge, timeAgo } from "../components";
 
 const WEBHOOK_EVENTS = ["spec.published", "review.submitted", "review.approved", "review.rejected", "feedback.created"];
+const LLM_TIERS: LlmTier[] = ["cheap", "standard", "frontier"];
+const LLM_ROUTES: Array<{ route: LlmTaskRoute; label: string; defaultTier: LlmTier }> = [
+  { route: "classification", label: "Classification", defaultTier: "cheap" },
+  { route: "summarization", label: "Summarization", defaultTier: "cheap" },
+  { route: "task_planning", label: "Task planning", defaultTier: "cheap" },
+  { route: "ticket_generation", label: "Ticket generation", defaultTier: "standard" },
+  { route: "maintenance", label: "Maintenance suggestions", defaultTier: "standard" },
+  { route: "spec_generation", label: "Spec generation", defaultTier: "frontier" },
+  { route: "audit", label: "Audits and audit prompts", defaultTier: "frontier" },
+  { route: "draft_fix", label: "AI draft fixes", defaultTier: "frontier" },
+  { route: "efficacy", label: "AI efficacy reports", defaultTier: "frontier" },
+  { route: "test", label: "Connectivity test", defaultTier: "standard" },
+];
+
+function modelPlaceholder(provider: LlmConfig["provider"]): string {
+  if (provider === "anthropic") return "claude-sonnet-4-5";
+  if (provider === "openai") return "gpt-4.1";
+  if (provider === "gemini") return "gemini-3.5-flash";
+  return "google/gemma-4-12b-qat";
+}
+
+function baseUrlPlaceholder(provider: LlmConfig["provider"]): string {
+  if (provider === "anthropic") return "Optional proxy base URL";
+  if (provider === "openai") return "Optional OpenAI-compatible proxy URL";
+  if (provider === "gemini") return "Optional Gemini API base URL";
+  return "LM Studio: http://10.0.0.142:1234 · Ollama: http://localhost:11434/v1";
+}
 
 export default function SettingsPage() {
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
@@ -30,7 +60,7 @@ export default function SettingsPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [keys, setKeys] = useState<ApiKeyRow[]>([]);
   const [ldap, setLdap] = useState<LdapConfig>();
-  const [llm, setLlm] = useState<LlmConfig>();
+  const [llmTiering, setLlmTiering] = useState<LlmTieringConfig>();
   const [embedding, setEmbedding] = useState<EmbeddingConfig>();
   const [embeddingStatus, setEmbeddingStatus] = useState<EmbeddingStatus>();
   const [appKeys, setAppKeys] = useState<AppKeyConfig>();
@@ -43,7 +73,7 @@ export default function SettingsPage() {
   const [llmNotice, setLlmNotice] = useState<string>();
   const [embeddingNotice, setEmbeddingNotice] = useState<string>();
   const [appKeyNotice, setAppKeyNotice] = useState<string>();
-  const [llmModels, setLlmModels] = useState<string[]>([]);
+  const [tierModels, setTierModels] = useState<Record<LlmTier, string[]>>({ cheap: [], standard: [], frontier: [] });
   const [llmTestStatus, setLlmTestStatus] = useState<"idle" | "running" | "ok" | "error">("idle");
   const [llmTestResult, setLlmTestResult] = useState<string>();
 
@@ -63,9 +93,11 @@ export default function SettingsPage() {
   const [ldapTestUsername, setLdapTestUsername] = useState("");
   const [ldapTestPassword, setLdapTestPassword] = useState("");
   const [ldapGroups, setLdapGroups] = useState("");
-  const [llmApiKey, setLlmApiKey] = useState("");
+  const [tierApiKeys, setTierApiKeys] = useState<Record<LlmTier, string>>({ cheap: "", standard: "", frontier: "" });
   const [embeddingApiKey, setEmbeddingApiKey] = useState("");
   const [llmTestPrompt, setLlmTestPrompt] = useState("Reply with ok.");
+  const [llmTestTier, setLlmTestTier] = useState<LlmTier>("standard");
+  const [llmTestRoute, setLlmTestRoute] = useState<LlmTaskRoute>("test");
   const [githubToken, setGithubToken] = useState("");
   const [githubWebhookSecret, setGithubWebhookSecret] = useState("");
   const [slackSigningSecret, setSlackSigningSecret] = useState("");
@@ -85,14 +117,14 @@ export default function SettingsPage() {
       api.users(),
       api.apiKeys(),
       api.ldapConfig(),
-      api.llmConfig(),
+      api.llmTiering(),
       api.embeddingConfig(),
       api.embeddingStatus(),
       api.appKeys(),
       api.approvalPolicies(),
       api.auditLog(50),
     ])
-      .then(([w, s, c, j, t, u, k, l, llmConfig, embeddingConfig, nextEmbeddingStatus, appKeyConfig, p, a]) => {
+      .then(([w, s, c, j, t, u, k, l, tieringConfig, embeddingConfig, nextEmbeddingStatus, appKeyConfig, p, a]) => {
         setWebhooks(w);
         setSubs(s);
         setConsumers(c);
@@ -101,7 +133,7 @@ export default function SettingsPage() {
         setUsers(u);
         setKeys(k);
         setLdap(l);
-        setLlm(llmConfig);
+        setLlmTiering(tieringConfig);
         setEmbedding(embeddingConfig);
         setEmbeddingStatus(nextEmbeddingStatus);
         setAppKeys(appKeyConfig);
@@ -131,17 +163,23 @@ export default function SettingsPage() {
     }
   }
 
-  async function saveCurrentLlm(config: LlmConfig): Promise<LlmConfig> {
-    const saved = await api.updateLlmConfig({
+  async function saveCurrentTier(tier: LlmTier): Promise<LlmTieringConfig> {
+    if (!llmTiering) throw new Error("LLM tiering config is not loaded");
+    const config = llmTiering.tiers[tier];
+    const saved = await api.updateLlmTier(tier, {
       provider: config.provider,
       model: config.model,
       base_url: config.base_url,
       max_tokens: config.max_tokens,
-      api_key: llmApiKey || undefined,
+      api_key: tierApiKeys[tier] || undefined,
     });
-    setLlm(saved);
-    setLlmApiKey("");
-    return saved;
+    const next = {
+      ...llmTiering,
+      tiers: { ...llmTiering.tiers, [tier]: saved },
+    };
+    setLlmTiering(next);
+    setTierApiKeys((keys) => ({ ...keys, [tier]: "" }));
+    return next;
   }
 
   async function saveCurrentEmbedding(config: EmbeddingConfig): Promise<EmbeddingConfig> {
@@ -295,129 +333,240 @@ export default function SettingsPage() {
       </div>
 
       <div className="section">
-        <h2>LLM provider</h2>
-        {llm && (
+        <h2>LLM routing</h2>
+        {llmTiering && (
           <>
             {llmNotice && (
               <div className="card" style={{ marginBottom: 12 }}>
                 {llmNotice}
               </div>
             )}
-            <div className="card" style={{ marginBottom: 12 }}>
-              <div className="form-row">
-                <select
-                  value={llm.provider}
-                  onChange={(e) => setLlm({ ...llm, provider: e.target.value as LlmConfig["provider"] })}
-                >
-                  <option value="anthropic">Anthropic</option>
-                  <option value="openai">OpenAI</option>
-                  <option value="gemini">Gemini</option>
-                  <option value="openai_compatible">OpenAI-compatible / local</option>
-                </select>
-                <input
-                  type="text"
-                  placeholder={
-                    llm.provider === "anthropic"
-                      ? "claude-opus-4-8"
-                      : llm.provider === "openai"
-                        ? "gpt-4.1"
-                        : llm.provider === "gemini"
-                          ? "gemini-3.5-flash"
-                          : "google/gemma-4-12b-qat"
-                  }
-                  value={llm.model}
-                  style={{ minWidth: 220, display: llmModels.length ? "none" : undefined }}
-                  onChange={(e) => setLlm({ ...llm, model: e.target.value })}
-                />
-                {llmModels.length > 0 && (
-                  <select
-                    value={llm.model}
-                    style={{ minWidth: 220 }}
-                    onChange={(e) => setLlm({ ...llm, model: e.target.value })}
-                  >
-                    {!llmModels.includes(llm.model) && <option value={llm.model}>{llm.model}</option>}
-                    {llmModels.map((model) => (
-                      <option key={model} value={model}>
-                        {model}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                <input
-                  type="number"
-                  min={1}
-                  value={llm.max_tokens}
-                  style={{ width: 120 }}
-                  onChange={(e) => setLlm({ ...llm, max_tokens: Number(e.target.value) })}
-                />
-                <button
-                  onClick={() =>
-                    act(async () => {
-                      const saved = await saveCurrentLlm(llm);
-                      const result = await api.llmModels();
-                      setLlmModels(result.models);
-                      if (result.models.length > 0 && !result.models.includes(saved.model)) {
-                        setLlm({ ...saved, model: result.models[0] });
+            {LLM_TIERS.map((tier) => {
+              const config = llmTiering.tiers[tier];
+              const models = tierModels[tier];
+              return (
+                <div className="card" style={{ marginBottom: 12 }} key={tier}>
+                  <div className="form-row" style={{ alignItems: "center" }}>
+                    <div style={{ minWidth: 180 }}>
+                      <strong>{config.label}</strong>
+                      <div className="faint">{config.description}</div>
+                    </div>
+                    <select
+                      value={config.provider}
+                      onChange={(e) =>
+                        setLlmTiering({
+                          ...llmTiering,
+                          tiers: {
+                            ...llmTiering.tiers,
+                            [tier]: { ...config, provider: e.target.value as LlmConfig["provider"] },
+                          },
+                        })
                       }
-                      setLlmNotice(
-                        result.models.length
-                          ? `Loaded ${result.models.length} model(s) from ${result.provider}. Select one, then save or test.`
-                          : `No models returned by ${result.provider}.`
-                      );
-                    }, false)
-                  }
-                >
-                  Load models
-                </button>
+                    >
+                      <option value="anthropic">Anthropic</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="gemini">Gemini</option>
+                      <option value="openai_compatible">OpenAI-compatible / local</option>
+                    </select>
+                    <input
+                      type="text"
+                      placeholder={modelPlaceholder(config.provider)}
+                      value={config.model}
+                      style={{ minWidth: 220, display: models.length ? "none" : undefined }}
+                      onChange={(e) =>
+                        setLlmTiering({
+                          ...llmTiering,
+                          tiers: { ...llmTiering.tiers, [tier]: { ...config, model: e.target.value } },
+                        })
+                      }
+                    />
+                    {models.length > 0 && (
+                      <select
+                        value={config.model}
+                        style={{ minWidth: 220 }}
+                        onChange={(e) =>
+                          setLlmTiering({
+                            ...llmTiering,
+                            tiers: { ...llmTiering.tiers, [tier]: { ...config, model: e.target.value } },
+                          })
+                        }
+                      >
+                        {!models.includes(config.model) && <option value={config.model}>{config.model}</option>}
+                        {models.map((model) => (
+                          <option key={model} value={model}>
+                            {model}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <input
+                      type="number"
+                      min={1}
+                      value={config.max_tokens}
+                      style={{ width: 120 }}
+                      onChange={(e) =>
+                        setLlmTiering({
+                          ...llmTiering,
+                          tiers: { ...llmTiering.tiers, [tier]: { ...config, max_tokens: Number(e.target.value) } },
+                        })
+                      }
+                    />
+                    <button
+                      onClick={() =>
+                        act(async () => {
+                          await saveCurrentTier(tier);
+                          const result = await api.llmTierModels(tier);
+                          setTierModels((current) => ({ ...current, [tier]: result.models }));
+                          if (result.models.length > 0 && !result.models.includes(config.model)) {
+                            setLlmTiering((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    tiers: {
+                                      ...current.tiers,
+                                      [tier]: { ...current.tiers[tier], model: result.models[0] },
+                                    },
+                                  }
+                                : current
+                            );
+                          }
+                          setLlmNotice(
+                            result.models.length
+                              ? `Loaded ${result.models.length} model(s) for ${config.label}. Select one, then save or test.`
+                              : `No models returned for ${config.label}.`
+                          );
+                        }, false)
+                      }
+                    >
+                      Load models
+                    </button>
+                    <button
+                      className="primary"
+                      onClick={() =>
+                        act(async () => {
+                          await saveCurrentTier(tier);
+                          setLlmNotice(`${config.label} tier saved.`);
+                        }, false)
+                      }
+                    >
+                      Save tier
+                    </button>
+                  </div>
+                  <div className="form-row">
+                    <input
+                      type="text"
+                      placeholder={baseUrlPlaceholder(config.provider)}
+                      value={config.base_url}
+                      style={{ flex: 1, minWidth: 360 }}
+                      onChange={(e) =>
+                        setLlmTiering({
+                          ...llmTiering,
+                          tiers: { ...llmTiering.tiers, [tier]: { ...config, base_url: e.target.value } },
+                        })
+                      }
+                    />
+                    <input
+                      type="password"
+                      placeholder={config.has_api_key ? "Stored API key" : "API key, optional for local"}
+                      value={tierApiKeys[tier]}
+                      onChange={(e) => setTierApiKeys((keys) => ({ ...keys, [tier]: e.target.value }))}
+                    />
+                    {config.has_api_key && <span className="faint">saved</span>}
+                    {config.has_api_key && (
+                      <button
+                        className="danger"
+                        onClick={() =>
+                          act(async () => {
+                            const saved = await api.updateLlmTier(tier, { clear_api_key: true });
+                            setLlmTiering({
+                              ...llmTiering,
+                              tiers: { ...llmTiering.tiers, [tier]: saved },
+                            });
+                            setLlmNotice(`${config.label} API key cleared.`);
+                          }, false)
+                        }
+                      >
+                        Clear key
+                      </button>
+                    )}
+                    <button
+                      onClick={() =>
+                        act(async () => {
+                          setLlmTestStatus("running");
+                          setLlmTestResult(undefined);
+                          try {
+                            await saveCurrentTier(tier);
+                            setLlmTestTier(tier);
+                            setLlmTestRoute("test");
+                            const result = await api.testLlm(llmTestPrompt, config.max_tokens, tier);
+                            setLlmTestStatus("ok");
+                            setLlmTestResult(
+                              `${result.tier}/${result.route} · ${result.provider}/${result.model} · max ${result.max_tokens} token(s)\n${result.text}`
+                            );
+                            setLlmNotice(`${config.label} test completed.`);
+                          } catch (e) {
+                            setLlmTestStatus("error");
+                            setLlmTestResult((e as Error).message);
+                            throw e;
+                          }
+                        }, false)
+                      }
+                      disabled={llmTestStatus === "running"}
+                    >
+                      Test tier
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            <div className="card" style={{ marginBottom: 12 }}>
+              <table className="grid">
+                <thead>
+                  <tr>
+                    <th>Feature</th>
+                    <th>Tier</th>
+                    <th>Default</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {LLM_ROUTES.map((item) => (
+                    <tr key={item.route}>
+                      <td>{item.label}</td>
+                      <td>
+                        <select
+                          value={llmTiering.routes[item.route]}
+                          onChange={(e) =>
+                            setLlmTiering({
+                              ...llmTiering,
+                              routes: { ...llmTiering.routes, [item.route]: e.target.value as LlmTier },
+                            })
+                          }
+                        >
+                          {LLM_TIERS.map((tier) => (
+                            <option key={tier} value={tier}>
+                              {llmTiering.tiers[tier].label}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="faint">{llmTiering.tiers[item.defaultTier].label}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="form-row" style={{ marginTop: 12 }}>
                 <button
                   className="primary"
                   onClick={() =>
                     act(async () => {
-                      const saved = await saveCurrentLlm(llm);
-                      setLlmModels((models) => (models.includes(saved.model) ? models : []));
-                      setLlmNotice("LLM settings saved.");
+                      const result = await api.updateLlmRoutes(llmTiering.routes);
+                      setLlmTiering({ ...llmTiering, routes: result.routes });
+                      setLlmNotice("LLM feature routing saved.");
                     }, false)
                   }
                 >
-                  Save LLM
+                  Save routing
                 </button>
-              </div>
-              <div className="form-row">
-                <input
-                  type="text"
-                  placeholder={
-                    llm.provider === "anthropic"
-                      ? "Optional proxy base URL"
-                      : llm.provider === "openai"
-                        ? "Optional OpenAI-compatible proxy URL"
-                        : llm.provider === "gemini"
-                          ? "Optional Gemini API base URL"
-                      : "LM Studio: http://10.0.0.142:1234 · Ollama: http://localhost:11434/v1"
-                  }
-                  value={llm.base_url}
-                  style={{ flex: 1, minWidth: 360 }}
-                  onChange={(e) => setLlm({ ...llm, base_url: e.target.value })}
-                />
-                <input
-                  type="password"
-                  placeholder={llm.has_api_key ? "Stored API key" : "API key, optional for local"}
-                  value={llmApiKey}
-                  onChange={(e) => setLlmApiKey(e.target.value)}
-                />
-                {llm.has_api_key && (
-                  <button
-                    className="danger"
-                    onClick={() =>
-                      act(async () => {
-                        const saved = await api.updateLlmConfig({ clear_api_key: true });
-                        setLlm(saved);
-                        setLlmNotice("LLM API key cleared.");
-                      })
-                    }
-                  >
-                    Clear key
-                  </button>
-                )}
               </div>
             </div>
             <div className="card">
@@ -429,17 +578,32 @@ export default function SettingsPage() {
                   style={{ flex: 1, minWidth: 320 }}
                   onChange={(e) => setLlmTestPrompt(e.target.value)}
                 />
+                <select value={llmTestTier} onChange={(e) => setLlmTestTier(e.target.value as LlmTier)}>
+                  {LLM_TIERS.map((tier) => (
+                    <option key={tier} value={tier}>
+                      {llmTiering.tiers[tier].label}
+                    </option>
+                  ))}
+                </select>
+                <select value={llmTestRoute} onChange={(e) => setLlmTestRoute(e.target.value as LlmTaskRoute)}>
+                  {LLM_ROUTES.map((item) => (
+                    <option key={item.route} value={item.route}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
                 <button
                   onClick={() =>
                     act(async () => {
                       setLlmTestStatus("running");
                       setLlmTestResult(undefined);
                       try {
-                        const saved = await saveCurrentLlm(llm);
-                        const result = await api.testLlm(llmTestPrompt, saved.max_tokens);
+                        const next = await saveCurrentTier(llmTestTier);
+                        const selected = next.tiers[llmTestTier];
+                        const result = await api.testLlm(llmTestPrompt, selected.max_tokens, llmTestTier, llmTestRoute);
                         setLlmTestStatus("ok");
                         setLlmTestResult(
-                          `${result.provider}/${result.model || saved.model} · max ${result.max_tokens} token(s)\n${result.text}`
+                          `${result.tier}/${result.route} · ${result.provider}/${result.model || selected.model} · max ${result.max_tokens} token(s)\n${result.text}`
                         );
                         setLlmNotice("LLM test completed.");
                       } catch (e) {
@@ -451,7 +615,7 @@ export default function SettingsPage() {
                   }
                   disabled={llmTestStatus === "running"}
                 >
-                  {llmTestStatus === "running" ? "Testing..." : "Test LLM"}
+                  {llmTestStatus === "running" ? "Testing..." : "Test route"}
                 </button>
               </div>
               {llmTestStatus !== "idle" && (
@@ -460,7 +624,7 @@ export default function SettingsPage() {
                 </pre>
               )}
               <div className="faint">
-                Use OpenAI or Gemini for hosted providers. OpenAI-compatible mode supports local/network services such as LM Studio, Ollama, vLLM, LocalAI, or an internal LLM gateway. Root URLs like http://10.0.0.142:1234 are normalized to /v1 automatically.
+                Cheap/local defaults to LLM_LOCAL_BASE_URL or LLM_CHEAP_BASE_URL when present. OpenAI-compatible mode supports local/network services such as LM Studio, Ollama, vLLM, LocalAI, or an internal LLM gateway. Root URLs like http://10.0.0.142:1234 are normalized to /v1 automatically.
               </div>
             </div>
           </>

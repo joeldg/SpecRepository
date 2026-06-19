@@ -317,6 +317,27 @@ export interface LlmConfig {
   max_tokens: number;
   has_api_key: boolean;
 }
+export type LlmTier = "cheap" | "standard" | "frontier";
+export type LlmTaskRoute =
+  | "classification"
+  | "summarization"
+  | "spec_generation"
+  | "task_planning"
+  | "ticket_generation"
+  | "audit"
+  | "draft_fix"
+  | "efficacy"
+  | "maintenance"
+  | "test";
+export interface LlmTierConfig extends LlmConfig {
+  tier: LlmTier;
+  label: string;
+  description: string;
+}
+export interface LlmTieringConfig {
+  tiers: Record<LlmTier, LlmTierConfig>;
+  routes: Record<LlmTaskRoute, LlmTier>;
+}
 export interface EmbeddingConfig {
   provider: "local_hash" | "openai" | "gemini" | "openai_compatible";
   model: string;
@@ -573,12 +594,18 @@ export const api = {
   llmConfig: () => request<LlmConfig>("/api/v1/llm/config"),
   updateLlmConfig: (body: Partial<Omit<LlmConfig, "has_api_key">> & { api_key?: string; clear_api_key?: boolean }) =>
     request<LlmConfig>("/api/v1/llm/config", { method: "PUT", body: JSON.stringify(body) }),
-  testLlm: (prompt?: string, max_tokens?: number) =>
-    request<{ ok: boolean; provider: string; model: string; text: string; max_tokens: number }>("/api/v1/llm/test", {
+  testLlm: (prompt?: string, max_tokens?: number, tier?: LlmTier, route?: LlmTaskRoute) =>
+    request<{ ok: boolean; provider: string; model: string; tier: LlmTier; route: LlmTaskRoute; text: string; max_tokens: number }>("/api/v1/llm/test", {
       method: "POST",
-      body: JSON.stringify({ prompt, max_tokens }),
+      body: JSON.stringify({ prompt, max_tokens, tier, route }),
     }),
   llmModels: () => request<{ provider: string; models: string[] }>("/api/v1/llm/models"),
+  llmTiering: () => request<LlmTieringConfig>("/api/v1/llm/tiering"),
+  updateLlmTier: (tier: LlmTier, body: Partial<Omit<LlmConfig, "has_api_key">> & { api_key?: string; clear_api_key?: boolean }) =>
+    request<LlmTierConfig>(`/api/v1/llm/tiering/tier/${tier}`, { method: "PUT", body: JSON.stringify(body) }),
+  updateLlmRoutes: (routes: Partial<Record<LlmTaskRoute, LlmTier>>) =>
+    request<{ routes: Record<LlmTaskRoute, LlmTier> }>("/api/v1/llm/tiering/routes", { method: "PUT", body: JSON.stringify({ routes }) }),
+  llmTierModels: (tier: LlmTier) => request<{ provider: string; models: string[]; tier: LlmTier }>(`/api/v1/llm/models/${tier}`),
   embeddingConfig: () => request<EmbeddingConfig>("/api/v1/embeddings/config"),
   updateEmbeddingConfig: (body: Partial<Omit<EmbeddingConfig, "has_api_key">> & { api_key?: string; clear_api_key?: boolean }) =>
     request<EmbeddingConfig>("/api/v1/embeddings/config", { method: "PUT", body: JSON.stringify(body) }),

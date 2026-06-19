@@ -2,7 +2,7 @@ import type { ProjectType } from "@specregistry/shared";
 import type { Db } from "../db.js";
 import { HttpError } from "../helpers.js";
 import { bundleSpecs } from "./compile.js";
-import { getLlmConfig, runLlmText } from "./llm.js";
+import { runLlmText, type LlmTaskRoute } from "./llm.js";
 
 export interface AuditFinding {
   severity: "high" | "medium" | "low";
@@ -28,8 +28,15 @@ export function extractJson<T>(text: string): T {
   return JSON.parse(candidate.slice(start, end + 1)) as T;
 }
 
-async function runConfiguredLlm(db: Db, system: string, user: string, maxTokens = 16000): Promise<string> {
-  return (await runLlmText(db, { system, user, maxTokens })).text;
+async function runConfiguredLlm(
+  db: Db,
+  system: string,
+  user: string,
+  maxTokens = 16000,
+  route: LlmTaskRoute = "audit"
+): Promise<{ text: string; model: string }> {
+  const result = await runLlmText(db, { system, user, maxTokens, route });
+  return { text: result.text, model: result.model };
 }
 
 /** Reverse conformance: does this codebase follow its governed specs? */
@@ -69,7 +76,7 @@ ${input.tree}
 ### Selected files
 ${fileBlock}`;
 
-  const raw = await runConfiguredLlm(db, system, user);
+  const raw = (await runConfiguredLlm(db, system, user, 16000, "audit")).text;
   const parsed = extractJson<{ findings?: AuditFinding[] }>(raw);
   return Array.isArray(parsed.findings) ? parsed.findings : [];
 }
@@ -94,9 +101,10 @@ export async function runEfficacy(db: Db, specContent: string, specFilename: str
       db,
       `${baseSystem}\n\nYou MUST follow this governing specification (${specFilename}):\n\n${specContent}`,
       task,
-      4000
+      4000,
+      "efficacy"
     ),
-    runConfiguredLlm(db, baseSystem, task, 4000),
+    runConfiguredLlm(db, baseSystem, task, 4000, "efficacy"),
   ]);
 
   const judgeSystem = `You are grading how well two anonymous responses to the same task adhere to a governing
@@ -109,20 +117,19 @@ ${specContent}
 ${task}
 
 ## Response A
-${withSpec}
+${withSpec.text}
 
 ## Response B
-${withoutSpec}`;
+${withoutSpec.text}`;
 
   const verdict = extractJson<{ score_a: number; score_b: number; rationale: string }>(
-    await runConfiguredLlm(db, judgeSystem, judgeUser, 4000)
+    (await runConfiguredLlm(db, judgeSystem, judgeUser, 4000, "efficacy")).text
   );
-  const config = getLlmConfig(db);
   return {
     score_with: verdict.score_a,
     score_without: verdict.score_b,
     improved: verdict.score_a > verdict.score_b,
     rationale: verdict.rationale,
-    model: config.model,
+    model: withSpec.model,
   };
 }
