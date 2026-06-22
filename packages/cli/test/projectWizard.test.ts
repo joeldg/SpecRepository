@@ -26,6 +26,7 @@ const profile: ProjectProfile = {
   environments: ["Local development", "Staging", "Production"],
   constraints: ["Private network deployment"],
   non_goals: ["Public SaaS hosting"],
+  agent_skills: ["load-governed-specs", "verify-conformance"],
 };
 
 test("multi-selection accepts numbered, named, and custom values without duplicates", () => {
@@ -51,5 +52,6 @@ test("project profile renders review status and all major SDD sections", () => {
   assert.match(markdown, /- PostgreSQL/);
   assert.match(markdown, /- Kubernetes/);
   assert.match(markdown, /- SOC 2/);
+  assert.match(markdown, /- verify-conformance/);
   assert.match(markdown, /Do not invent missing technology choices/);
 });

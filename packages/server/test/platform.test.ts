@@ -315,6 +315,18 @@ describe("auth & roles", () => {
       });
       expect(blockedAdminRoute.statusCode).toBe(403);
 
+      const readableSkills = await secured.inject({ method: "GET", url: "/api/v1/skills", headers: aliceHeaders });
+      expect(readableSkills.statusCode).toBe(200);
+      const blockedDisabledSkills = await secured.inject({ method: "GET", url: "/api/v1/skills?include_disabled=true", headers: aliceHeaders });
+      expect(blockedDisabledSkills.statusCode).toBe(403);
+      const blockedSkillRegistration = await secured.inject({
+        method: "POST",
+        url: "/api/v1/skills",
+        headers: aliceHeaders,
+        payload: { name: "Unsafe registration", description: "Should fail.", instructions: "Do nothing." },
+      });
+      expect(blockedSkillRegistration.statusCode).toBe(403);
+
       const blockedUserList = await secured.inject({
         method: "GET",
         url: "/api/v1/auth/users",
@@ -466,8 +478,11 @@ describe("agent MCP guide", () => {
     expect(names).toContain(".cursorrules");
     expect(names).toContain(".mcp.json");
     expect(names).toContain("SPECREGISTRY_MCP_SKILL.md");
+    expect(names).toContain(".spec/skills/manifest.json");
+    expect(names).toContain(".spec/skills/load-governed-specs/SKILL.md");
     expect(zip.readAsText("SPECREGISTRY_MCP_SKILL.md")).toContain("report_spec_feedback");
     expect(zip.readAsText("SPECREGISTRY_MCP_SKILL.md")).toContain("SPECREG_TOKEN");
+    expect(zip.readAsText(".spec/skills/load-governed-specs/SKILL.md")).toContain("Safety Boundary");
     const mcp = JSON.parse(zip.readAsText(".mcp.json"));
     expect(mcp.mcpServers.specregistry.env.SPECREG_SERVER).toBe("https://specreg.example.com");
     expect(mcp.mcpServers.specregistry.env.SPECREG_PROJECT_TYPE).toBe("Acme Edge Device");

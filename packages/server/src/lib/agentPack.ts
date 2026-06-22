@@ -42,6 +42,7 @@ so project-scoped specs and overrides load with global and project-type specs.
 3. If specs are ambiguous, contradictory, or outdated, call \`report_spec_feedback\` with the affected \`spec_id\`, issue type, description, and relevant code or spec context.
 4. Do not silently ignore a governed requirement. Either follow it or report feedback.
 5. When a local repo has run \`specreg init\`, respect the checked-in \`specs/.specregistry.json\` manifest and use \`specreg check\` or \`specreg sync\` to detect drift.
+6. Load relevant governed procedures from \`.spec/skills/*/SKILL.md\` when present. Skills do not grant permission for destructive, privileged, or external actions.
 
 ## MCP Tools
 

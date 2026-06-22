@@ -55,7 +55,9 @@ A command-line interface deployed to developer environments to synchronize local
     3. Pulls the latest approved Markdown specs for that type from the server.
     4. Writes the governed bundle and manifest, MCP discovery files, a structured local
        profile, and a project-scoped `PROJECT_PROFILE.md` draft.
-    5. Reports the concrete project and submits the profile as a draft without bypassing review.
+    5. Selects governed agent procedures from an admin-managed catalog and writes standard
+       `SKILL.md` files plus a local provenance/risk manifest.
+    6. Reports the concrete project and submits the profile as a draft without bypassing review.
 * **Scenario B: Existing Directory Discovery (`specreg generate`)**
     1. Scans the existing directory structure and files.
     2. Sends structural metadata to the server.
@@ -141,7 +143,17 @@ A command-line interface deployed to developer environments to synchronize local
    * Payload: AI Agent Feedback schema.
    * Behavior: Flags the target specification version in the Web UI dashboard, creating an alert for the spec authors.
 
-### 4.3. CLI Codebase Parsing Stubs
+### 4.3. Governed Agent Skills
+
+* `GET /api/v1/skills` - List active skills available to initialization and agents.
+* `POST /api/v1/skills` - Register an admin-managed Markdown operating procedure.
+* `PUT /api/v1/skills/:id` - Update risk, instructions, or active/disabled state.
+* `DELETE /api/v1/skills/:id` - Delete custom skills; built-ins can only be disabled.
+
+Skills carry `safe` or `restricted` risk labels and must not contain credentials or executable
+payloads. They organize reusable agent procedures but do not confer authorization.
+
+### 4.4. CLI Codebase Parsing Stubs
 
 * `POST /api/v1/cli/stub-prompts`
    * Payload: `{ "project_type": "string", "detected_languages": ["string"] }`

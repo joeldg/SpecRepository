@@ -25,6 +25,7 @@ import { reindexSpecSearch } from "../lib/search.js";
 import { sha256, signManifest } from "../lib/sign.js";
 import { reviewImpact } from "../lib/reviewImpact.js";
 import { migrationChecklist, specChangeSummaryMarkdown } from "../lib/specChangeSummary.js";
+import { renderSkillMarkdown, type AgentSkillRecord } from "../lib/skills.js";
 
 const SUMMARY_SELECT = `
   SELECT s.id, s.project_type_id, s.project_id, s.filename, s.current_version, s.status,
@@ -258,6 +259,16 @@ export async function specRoutes(app: FastifyInstance): Promise<void> {
     const serverUrl = publicUrl(req);
     zip.addFile(".mcp.json", Buffer.from(JSON.stringify(mcpConfig(serverUrl, pt, project?.repo), null, 2) + "\n", "utf8"));
     zip.addFile("SPECREGISTRY_MCP_SKILL.md", Buffer.from(mcpSkillMarkdown(serverUrl, pt, project?.repo), "utf8"));
+    const skills = app.db
+      .prepare("SELECT * FROM agent_skills WHERE status = 'active' AND built_in = 1 AND risk_level = 'safe' ORDER BY name")
+      .all() as AgentSkillRecord[];
+    for (const skill of skills) {
+      zip.addFile(`.spec/skills/${skill.slug}/SKILL.md`, Buffer.from(renderSkillMarkdown(skill), "utf8"));
+    }
+    zip.addFile(
+      ".spec/skills/manifest.json",
+      Buffer.from(JSON.stringify({ source: "specregistry", skills: skills.map(({ id, slug, name, description, risk_level }) => ({ id, slug, name, description, risk_level })) }, null, 2) + "\n", "utf8")
+    );
     recordUsage(app.db, "download", pt.id, "agent-pack");
     reply
       .header("content-type", "application/zip")

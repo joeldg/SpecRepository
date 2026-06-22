@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Webhook } from "@specregistry/shared";
 import {
   api,
+  type AgentSkillRow,
   type AppKeyConfig,
   type AuditLogRow,
   type ApiKeyRow,
@@ -75,6 +76,7 @@ export default function SettingsPage() {
   const [mcpGuide, setMcpGuide] = useState<McpGuide>();
   const [policies, setPolicies] = useState<ApprovalPolicyRow[]>([]);
   const [auditRows, setAuditRows] = useState<AuditLogRow[]>([]);
+  const [agentSkills, setAgentSkills] = useState<AgentSkillRow[]>([]);
   const [error, setError] = useState<string>();
   const [issuedToken, setIssuedToken] = useState<string>();
   const [ldapNotice, setLdapNotice] = useState<string>();
@@ -114,6 +116,11 @@ export default function SettingsPage() {
   const [policyGlob, setPolicyGlob] = useState("*.md");
   const [policyApprovals, setPolicyApprovals] = useState(2);
   const [policyReviewers, setPolicyReviewers] = useState("");
+  const [skillName, setSkillName] = useState("");
+  const [skillSlug, setSkillSlug] = useState("");
+  const [skillDescription, setSkillDescription] = useState("");
+  const [skillInstructions, setSkillInstructions] = useState("");
+  const [skillRisk, setSkillRisk] = useState<AgentSkillRow["risk_level"]>("safe");
 
   const reload = useCallback(() => {
     Promise.all([
@@ -131,8 +138,9 @@ export default function SettingsPage() {
       api.appKeys(),
       api.approvalPolicies(),
       api.auditLog(50),
+      api.agentSkills(true),
     ])
-      .then(([w, s, c, j, t, u, k, l, tieringConfig, embeddingConfig, nextEmbeddingStatus, appKeyConfig, p, a]) => {
+      .then(([w, s, c, j, t, u, k, l, tieringConfig, embeddingConfig, nextEmbeddingStatus, appKeyConfig, p, a, nextSkills]) => {
         setWebhooks(w);
         setSubs(s);
         setConsumers(c);
@@ -147,6 +155,7 @@ export default function SettingsPage() {
         setAppKeys(appKeyConfig);
         setPolicies(p);
         setAuditRows(a);
+        setAgentSkills(nextSkills);
         setSubTypeId((current) => current || t[0]?.id || "");
         setKeyUsername((current) => current || u[0]?.username || "");
         setMcpTypeName((current) => current || t.find((x) => x.scope !== "global")?.name || t[0]?.name || "");
@@ -1069,6 +1078,70 @@ export default function SettingsPage() {
             </pre>
           )}
         </div>
+      </div>
+
+      <div className={`section${activeTab === "ai" ? "" : " settings-hidden"}`}>
+        <h2>Agent skills</h2>
+        <p className="settings-help">Register governed Markdown procedures that agents can select during initialization. Restricted skills require extra scrutiny and never grant permission by themselves.</p>
+        <div className="card" style={{ marginBottom: 12 }}>
+          <div className="form-row">
+            <input type="text" placeholder="Skill name" value={skillName} onChange={(e) => setSkillName(e.target.value)} />
+            <input type="text" placeholder="slug (optional)" value={skillSlug} onChange={(e) => setSkillSlug(e.target.value)} />
+            <select value={skillRisk} onChange={(e) => setSkillRisk(e.target.value as AgentSkillRow["risk_level"])}>
+              <option value="safe">Safe procedure</option>
+              <option value="restricted">Restricted procedure</option>
+            </select>
+          </div>
+          <div className="form-row">
+            <input type="text" placeholder="When should an agent use this skill?" value={skillDescription} style={{ flex: 1 }} onChange={(e) => setSkillDescription(e.target.value)} />
+          </div>
+          <div className="form-row">
+            <textarea placeholder="Step-by-step agent instructions. Do not include secrets or executable payloads." value={skillInstructions} style={{ width: "100%", minHeight: 110 }} onChange={(e) => setSkillInstructions(e.target.value)} />
+          </div>
+          <button
+            className="primary"
+            disabled={!skillName.trim() || !skillDescription.trim() || !skillInstructions.trim()}
+            onClick={() =>
+              act(async () => {
+                await api.createAgentSkill({
+                  name: skillName.trim(),
+                  slug: skillSlug.trim() || skillName.trim(),
+                  description: skillDescription.trim(),
+                  instructions: skillInstructions.trim(),
+                  risk_level: skillRisk,
+                });
+                setSkillName("");
+                setSkillSlug("");
+                setSkillDescription("");
+                setSkillInstructions("");
+                setSkillRisk("safe");
+              })
+            }
+          >
+            Register skill
+          </button>
+        </div>
+        <table className="grid">
+          <thead>
+            <tr><th>Skill</th><th>Risk</th><th>Status</th><th>Purpose</th><th></th></tr>
+          </thead>
+          <tbody>
+            {agentSkills.map((skill) => (
+              <tr key={skill.id}>
+                <td><strong>{skill.name}</strong><div className="mono faint">{skill.slug}{skill.built_in ? " · built in" : ""}</div></td>
+                <td><StatusBadge status={skill.risk_level === "safe" ? "approved" : "pending"} /> {skill.risk_level}</td>
+                <td>{skill.status}</td>
+                <td className="dim">{skill.description}</td>
+                <td>
+                  <button onClick={() => act(() => api.updateAgentSkill(skill.id, { status: skill.status === "active" ? "disabled" : "active" }))}>
+                    {skill.status === "active" ? "Disable" : "Enable"}
+                  </button>{" "}
+                  {!skill.built_in && <button className="danger" onClick={() => act(() => api.deleteAgentSkill(skill.id))}>Delete</button>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       <div className={`section${activeTab === "governance" ? "" : " settings-hidden"}`}>

@@ -397,6 +397,18 @@ export interface AuditLogRow {
   detail: string | null;
   created_at: string;
 }
+export interface AgentSkillRow {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  instructions: string;
+  risk_level: "safe" | "restricted";
+  status: "active" | "disabled";
+  built_in: number;
+  created_at: string;
+  updated_at: string;
+}
 
 const TOKEN_KEY = "specregistry.token";
 const USERNAME_KEY = "specregistry.username";
@@ -628,6 +640,13 @@ export const api = {
   ) => request<AppKeyConfig>("/api/v1/app-keys", { method: "PUT", body: JSON.stringify(body) }),
   mcpGuide: (projectType?: string) =>
     request<McpGuide>(`/api/v1/ai/mcp-guide${projectType ? `/${encodeURIComponent(projectType)}` : ""}`),
+  agentSkills: (includeDisabled = false) =>
+    request<AgentSkillRow[]>(`/api/v1/skills${includeDisabled ? "?include_disabled=true" : ""}`),
+  createAgentSkill: (body: Pick<AgentSkillRow, "name" | "slug" | "description" | "instructions" | "risk_level">) =>
+    request<AgentSkillRow>("/api/v1/skills", { method: "POST", body: JSON.stringify(body) }),
+  updateAgentSkill: (id: string, body: Partial<Pick<AgentSkillRow, "name" | "description" | "instructions" | "risk_level" | "status">>) =>
+    request<AgentSkillRow>(`/api/v1/skills/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteAgentSkill: (id: string) => requestVoid(`/api/v1/skills/${id}`, { method: "DELETE" }),
   approvalPolicies: () => request<ApprovalPolicyRow[]>("/api/v1/approval-policies"),
   createApprovalPolicy: (body: {
     project_type_id?: string | null;

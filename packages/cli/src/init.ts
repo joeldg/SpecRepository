@@ -7,6 +7,7 @@ import { fetchJson, registryToken, selectProjectType, withRegistryAuth } from ".
 import { repoIdentity, reportManifest, type Manifest } from "./repo.js";
 import { installGoogleStyleGuides, type InstalledStyleGuide } from "./styleguides.js";
 import { renderProjectProfile, runProjectSetupWizard, type ProjectProfile } from "./projectWizard.js";
+import { installAgentSkills, listAgentSkills, resolveAgentSkills, type AgentSkill } from "./skills.js";
 
 export interface InitOptions {
   server: string;
@@ -16,13 +17,19 @@ export interface InitOptions {
   force?: boolean;
   styleguides?: string;
   styleguideDir: string;
+  skills?: string;
+  skillDir: string;
 }
 
 export async function runInit(opts: InitOptions): Promise<void> {
   const setup = opts.type
-    ? { projectType: await selectProjectType(opts.server, opts.type, opts.token), profile: undefined }
-    : await runProjectSetupWizard(opts.server, opts.token);
-  const { projectType, profile } = setup;
+    ? {
+        projectType: await selectProjectType(opts.server, opts.type, opts.token),
+        profile: undefined,
+        skills: resolveAgentSkills(await listAgentSkills(opts.server, opts.token), opts.skills),
+      }
+    : await runProjectSetupWizard(opts.server, opts.token, opts.skills);
+  const { projectType, profile, skills } = setup;
   if (profile) assertProjectProfileTargetsAvailable(profile, opts.force === true);
   console.log(`\nFetching latest approved specs for "${projectType.name}"...`);
 
@@ -68,9 +75,10 @@ export async function runInit(opts: InitOptions): Promise<void> {
   } catch (err) {
     console.log(`Could not install Google style guides: ${err instanceof Error ? err.message : String(err)}`);
   }
+  installAgentSkills(skills, opts.skillDir, opts.force === true);
 
   writeMcpConfig(opts.server, projectType.name, identity.repo, registryToken(opts.token));
-  writeRegistryGuide(opts.server, projectType.name, identity.repo, opts.dir, registryToken(opts.token), styleGuides, opts.styleguideDir);
+  writeRegistryGuide(opts.server, projectType.name, identity.repo, opts.dir, registryToken(opts.token), styleGuides, opts.styleguideDir, skills, opts.skillDir);
   let projectId: string | undefined;
   try {
     const reported = await reportManifest(opts.server, opts.token, nextManifest, opts.dir, "init");
@@ -213,7 +221,9 @@ function writeRegistryGuide(
   specDir: string,
   token?: string,
   styleGuides: InstalledStyleGuide[] = [],
-  styleguideDir = ".spec/styleguides"
+  styleguideDir = ".spec/styleguides",
+  skills: AgentSkill[] = [],
+  skillDir = ".spec/skills"
 ): void {
   const guidePath = path.resolve(process.cwd(), "SPECREGISTRY.md");
   if (fs.existsSync(guidePath)) {
@@ -234,6 +244,7 @@ This repository is governed by SpecRegistry.
 - Governed specs directory: ${specDir}/
 - Manifest: ${specDir}/.specregistry.json
 ${styleGuides.length > 0 ? `- External style guide directory: ${styleguideDir}/\n- External style guide manifest: ${styleguideDir}/google-styleguides.json\n` : ""}
+${skills.length > 0 ? `- Governed agent skill directory: ${skillDir}/\n- Agent skill manifest: ${skillDir}/manifest.json\n` : ""}
 
 Before changing code, load the global and project-type specifications listed in the manifest.
 Treat these as the approved source of truth. Generated repo-specific drafts belong outside
@@ -249,6 +260,17 @@ ${styleGuides.map((guide) => `- ${guide.title}: \`${guide.path}\``).join("\n")}
 
 Use these guides when editing matching code or documentation, but report conflicts through
 SpecRegistry feedback instead of silently overriding governed specs.
+` : ""}
+${skills.length > 0 ? `
+## Agent Skills
+
+The registry selected these governed operating procedures for this project:
+
+${skills.map((skill) => `- ${skill.name} [${skill.risk_level}]: \`${skillDir}/${skill.slug}/SKILL.md\``).join("\n")}
+
+Load a relevant skill before performing its workflow. Skills organize approved procedures;
+they do not grant permission for destructive, privileged, or external actions. Follow the
+agent host's approval policy and current published specs.
 ` : ""}
 
 ## MCP

@@ -27,6 +27,8 @@ Options:
   --dir <path>      Spec directory (default: specs; generate --write default: .spec/drafts)
   --styleguides <s> init: suggested | all | none | comma ids (default: interactive/suggested)
   --styleguide-dir <path> init: local Google guide directory (default: .spec/styleguides)
+  --skills <s>      init: base | all | none | comma skill slugs (default: interactive/base)
+  --skill-dir <p>   init: local governed skill directory (default: .spec/skills)
   --out <path>      generate: prompt output directory (default: .spec/prompts)
   --target <t>      compile: claude | agents | cursor (default: claude)
   --author <name>   submit-drafts: author/proposer name (default: $USER or cli)
@@ -87,6 +89,8 @@ try {
       force: flags.force === true,
       styleguides: typeof flags.styleguides === "string" ? flags.styleguides : undefined,
       styleguideDir: typeof flags["styleguide-dir"] === "string" ? flags["styleguide-dir"] : ".spec/styleguides",
+      skills: typeof flags.skills === "string" ? flags.skills : undefined,
+      skillDir: typeof flags["skill-dir"] === "string" ? flags["skill-dir"] : ".spec/skills",
     });
   } else if (command === "generate") {
     await runGenerate({

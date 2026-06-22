@@ -11,6 +11,7 @@ import { authRoutes } from "./routes/auth.js";
 import { integrationRoutes } from "./routes/integrations.js";
 import { metricsRoutes } from "./routes/metrics.js";
 import { automationRoutes } from "./routes/automation.js";
+import { skillRoutes } from "./routes/skills.js";
 import { registerAuth } from "./lib/auth.js";
 import { reindexAll } from "./lib/search.js";
 import { getPublicKey } from "./lib/sign.js";
@@ -43,6 +44,7 @@ export async function buildApp(db: Db, opts: AppOptions = {}): Promise<FastifyIn
   await app.register(feedbackRoutes, { prefix: "/api/v1" });
   await app.register(stubPromptRoutes, { prefix: "/api/v1" });
   await app.register(automationRoutes, { prefix: "/api/v1" });
+  await app.register(skillRoutes, { prefix: "/api/v1" });
   await app.register(adminRoutes, { prefix: "/api/v1" });
   await app.register(authRoutes, { prefix: "/api/v1" });
   await app.register(integrationRoutes, { prefix: "/api/v1" });

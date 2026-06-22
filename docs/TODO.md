@@ -35,6 +35,8 @@
 
 - [x] Comprehensive guided new-project setup in `specreg init`, with custom stack choices,
   premade project-type fallback, structured profile output, and project-scoped draft submission.
+- [x] Governed agent skill catalog with safe defaults, risk labels, admin registration,
+  init-time selection, local `SKILL.md` installation, and generated-agent discovery guidance.
 - [x] Project-local Google style guide onboarding during `specreg init`, with suggested
   multi-select, converted Markdown copies, and agent-discoverable guide manifests.
 - [x] Official `specreg check` GitHub Action with optional PR comments.

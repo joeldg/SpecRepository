@@ -68,6 +68,17 @@ project profile and `PROJECT_PROFILE.md` draft, and submits that profile as a pr
 draft for review. `--type <name>` skips the walkthrough for automation and existing projects.
 Selected languages also inform advisory Google style-guide suggestions in otherwise empty repos.
 
+### Governed Agent Skills
+
+The registry seeds a safe base catalog for loading specs, focused spec search, feedback,
+spec-driven planning, conformance verification, and delivery evidence. Admins can register
+custom Markdown procedures, label them safe or restricted, and disable them centrally.
+
+The init wizard selects skills and installs standard `SKILL.md` files under `.spec/skills/`,
+plus a provenance manifest. Generated repository and agent guidance points agents to this
+directory. Skills are instructional procedures only: they do not grant tool permissions or
+authorization for destructive, privileged, or external actions.
+
 ### `specreg check` and `specreg sync`
 
 `check` detects drift between local specs and the registry. `sync` updates local specs and regenerates saved agent context targets.

@@ -67,6 +67,47 @@ Existing. Clarified.
   });
 });
 
+describe("governed agent skills", () => {
+  it("seeds safe base skills and supports admin-managed skill lifecycle", async () => {
+    const initial = await getJson("/api/v1/skills");
+    expect(initial.length).toBeGreaterThanOrEqual(6);
+    expect(initial.every((skill: any) => skill.status === "active")).toBe(true);
+    expect(initial.find((skill: any) => skill.slug === "load-governed-specs")).toMatchObject({
+      built_in: 1,
+      risk_level: "safe",
+    });
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/skills",
+      payload: {
+        name: "Prepare deployment",
+        slug: "Prepare Deployment!",
+        description: "Prepare a reviewed release plan.",
+        instructions: "Build the release checklist and stop before deployment.",
+        risk_level: "restricted",
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({ slug: "prepare-deployment", risk_level: "restricted", status: "active", built_in: 0 });
+
+    const disabled = await app.inject({
+      method: "PUT",
+      url: `/api/v1/skills/${created.json().id}`,
+      payload: { status: "disabled" },
+    });
+    expect(disabled.statusCode).toBe(200);
+    expect(disabled.json().status).toBe("disabled");
+    expect((await getJson("/api/v1/skills")).some((skill: any) => skill.id === created.json().id)).toBe(false);
+    expect((await getJson("/api/v1/skills?include_disabled=true")).find((skill: any) => skill.id === created.json().id).status).toBe("disabled");
+
+    const removed = await app.inject({ method: "DELETE", url: `/api/v1/skills/${created.json().id}` });
+    expect(removed.statusCode).toBe(204);
+    const builtInDelete = await app.inject({ method: "DELETE", url: `/api/v1/skills/${initial[0].id}` });
+    expect(builtInDelete.statusCode).toBe(409);
+  });
+});
+
 describe("sync-check (CLI drift detection)", () => {
   it("records repository manifest consumers and reports outdated counts", async () => {
     const report = await app.inject({

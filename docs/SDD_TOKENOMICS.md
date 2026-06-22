@@ -55,6 +55,10 @@ Every governed repository should follow this workflow.
    or non-interactive automation, use `specreg init --type <name>`.
    Initialization writes `specs/.specregistry.json`, MCP configuration, and agent discovery
    guidance. Questionnaire answers are not governed until the project profile is reviewed and published.
+   Select the smallest useful set of governed agent skills during initialization. Safe built-in
+   procedures are selected by default and installed under `.spec/skills/`. Restricted skills
+   require deliberate selection. Skills structure agent behavior but never override host approval,
+   least-privilege requirements, or published specs.
    For auth-required registries, pass `--token <token>` or set `SPECREG_TOKEN`; `specreg init` carries that token into the generated MCP configuration.
    Init also scans the repository and offers a suggested multi-select of Google style
    guides from `https://google.github.io/styleguide/`, including `/docguide` for

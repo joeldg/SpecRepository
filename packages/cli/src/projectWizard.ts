@@ -2,6 +2,7 @@ import path from "node:path";
 import readline from "node:readline/promises";
 import type { ProjectType } from "@specregistry/shared";
 import { fetchJson, listProjectTypes } from "./registry.js";
+import { listAgentSkills, resolveAgentSkills, type AgentSkill } from "./skills.js";
 
 export interface ProjectProfile {
   schema_version: 1;
@@ -27,11 +28,13 @@ export interface ProjectProfile {
   environments: string[];
   constraints: string[];
   non_goals: string[];
+  agent_skills: string[];
 }
 
 export interface ProjectWizardResult {
   projectType: ProjectType;
   profile?: ProjectProfile;
+  skills: AgentSkill[];
 }
 
 interface Choice {
@@ -139,6 +142,8 @@ ${section("Constraints", profile.constraints)}
 
 ${section("Non-goals", profile.non_goals)}
 
+${section("Agent Skills", profile.agent_skills)}
+
 ## Acceptance Criteria
 
 - Architecture and implementation decisions remain consistent with this profile and all approved global and project-type specs.
@@ -154,11 +159,12 @@ ${section("Non-goals", profile.non_goals)}
 `;
 }
 
-export async function runProjectSetupWizard(server: string, token?: string): Promise<ProjectWizardResult> {
+export async function runProjectSetupWizard(server: string, token?: string, skillSelection?: string): Promise<ProjectWizardResult> {
   if (!process.stdin.isTTY) {
     throw new Error("Interactive project setup requires a terminal. Use --type <name> for a premade project type.");
   }
   const projectTypes = await listProjectTypes(server, token);
+  const skillCatalog = await listAgentSkills(server, token);
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   try {
     console.log("\nHow would you like to initialize this repository?\n");
@@ -166,7 +172,7 @@ export async function runProjectSetupWizard(server: string, token?: string): Pro
     console.log("  2. Use an existing / premade project type");
     const mode = (await rl.question("\nChoose [1]: ")).trim();
     if (mode === "2" || /^existing|premade$/i.test(mode)) {
-      return { projectType: await chooseExistingType(rl, projectTypes) };
+      return { projectType: await chooseExistingType(rl, projectTypes), skills: resolveAgentSkills(skillCatalog, skillSelection) };
     }
 
     console.log("\nNew project walkthrough");
@@ -177,6 +183,9 @@ export async function runProjectSetupWizard(server: string, token?: string): Pro
     const lifecycle = await askSingle(rl, "Lifecycle stage", ["Prototype", "Internal", "Production", "Regulated or safety-critical"], "Prototype");
     const users = commaValues(await rl.question("Primary users/stakeholders [comma-separated]: "));
 
+    const selectedSkills = skillSelection
+      ? resolveAgentSkills(skillCatalog, skillSelection)
+      : await chooseAgentSkills(rl, skillCatalog);
     const profile: ProjectProfile = {
       schema_version: 1,
       project_name: projectName,
@@ -201,6 +210,7 @@ export async function runProjectSetupWizard(server: string, token?: string): Pro
       environments: await askMulti(rl, "Deployment environments", CHOICES.environments, ["Local development", "Production"]),
       constraints: commaValues(await rl.question("Architecture or operational constraints [comma-separated, optional]: ")),
       non_goals: commaValues(await rl.question("Explicit non-goals [comma-separated, optional]: ")),
+      agent_skills: selectedSkills.map((skill) => skill.slug),
     };
 
     console.log("\nProfile summary:");
@@ -210,10 +220,21 @@ export async function runProjectSetupWizard(server: string, token?: string): Pro
     if (/^n(o)?$/i.test(confirmed)) throw new Error("Project setup cancelled.");
 
     const projectType = await chooseGoverningType(rl, projectTypes, profile, server, token);
-    return { projectType, profile };
+    return { projectType, profile, skills: selectedSkills };
   } finally {
     rl.close();
   }
+}
+
+async function chooseAgentSkills(rl: readline.Interface, catalog: AgentSkill[]): Promise<AgentSkill[]> {
+  console.log("\nAgent skills:");
+  catalog.forEach((skill, index) => {
+    const marker = skill.built_in && skill.risk_level === "safe" ? "*" : " ";
+    console.log(` ${marker} ${index + 1}. ${skill.slug} [${skill.risk_level}] - ${skill.description}`);
+  });
+  console.log("Base safe skills are marked with *. Restricted skills should be selected only when their procedure is appropriate.");
+  const answer = await rl.question("Select skills [Enter=base, comma numbers/slugs, all, none]: ");
+  return resolveAgentSkills(catalog, answer || "base");
 }
 
 async function askMulti(rl: readline.Interface, title: string, options: Choice[], defaults: string[] = []): Promise<string[]> {

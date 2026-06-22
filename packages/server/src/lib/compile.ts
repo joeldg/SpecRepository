@@ -51,7 +51,8 @@ These rules govern how you use this compiled file with SpecRegistry:
 5. Do not edit generated governance files by hand. Refresh \`CLAUDE.md\`, \`AGENTS.md\`, \`.cursorrules\`, and governed \`specs/\` content with \`specreg sync\` or \`specreg compile\`.
 6. Treat spec drift as a blocker. If local specs appear stale, ask for or run \`specreg check\` / \`specreg sync\` before relying on them.
 7. Report spec problems through SpecRegistry. If guidance is unclear, incomplete, contradictory, or outdated, call \`report_spec_feedback\` instead of guessing.
-8. Follow published specs until they change. Feedback and draft fixes do not override the source of truth until a reviewed spec update is published and synced.`;
+8. Follow published specs until they change. Feedback and draft fixes do not override the source of truth until a reviewed spec update is published and synced.
+9. Use governed agent skills when available. Load relevant procedures from \`.spec/skills/*/SKILL.md\`; a skill organizes a workflow but never grants permission for destructive, privileged, or external actions.`;
 
 /** The published spec set for a project type or concrete project (global -> type -> project), with channel overlay. */
 export function bundleSpecs(db: Db, projectTypeId: string, channel = "stable", projectId?: string): BundleSpec[] {

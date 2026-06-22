@@ -277,7 +277,7 @@ const POLICIES: Array<{ method: RegExp; path: RegExp; min: Role }> = [
   { method: /GET/, path: /^\/api\/v1\/audit-log$/, min: "admin" },
   { method: /GET/, path: /^\/api\/v1\/cli\/consumers$/, min: "admin" },
   { method: /POST/, path: /^\/api\/v1\/cli\/manifest-report$/, min: "agent" },
-  { method: /POST|PUT|DELETE/, path: /^\/api\/v1\/(templates|webhooks|subscriptions|approval-policies)(\/|$)/, min: "admin" },
+  { method: /POST|PUT|DELETE/, path: /^\/api\/v1\/(templates|webhooks|subscriptions|approval-policies|skills)(\/|$)/, min: "admin" },
   { method: /POST/, path: /^\/api\/v1\/spec-generation\/draft$/, min: "author" },
   { method: /POST/, path: /^\/api\/v1\/spec-generation\/preview$/, min: "author" },
   { method: /POST/, path: /^\/api\/v1\/automation\//, min: "author" },

@@ -238,6 +238,19 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_audit_log_time ON audit_log(created_at);
+
+CREATE TABLE IF NOT EXISTS agent_skills (
+  id TEXT PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  instructions TEXT NOT NULL,
+  risk_level TEXT NOT NULL DEFAULT 'safe' CHECK (risk_level IN ('safe', 'restricted')),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
+  built_in INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 `;
 
 /** Versioned migrations for databases created before the current schema. Each runs once. */
@@ -380,7 +393,75 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
       CREATE INDEX IF NOT EXISTS idx_spec_embeddings_provider_model ON spec_embeddings(provider, model);
     `,
   },
+  {
+    version: 14,
+    sql: `
+      CREATE TABLE IF NOT EXISTS agent_skills (
+        id TEXT PRIMARY KEY,
+        slug TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        instructions TEXT NOT NULL,
+        risk_level TEXT NOT NULL DEFAULT 'safe' CHECK (risk_level IN ('safe', 'restricted')),
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
+        built_in INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `,
+  },
 ];
+
+const DEFAULT_AGENT_SKILLS = [
+  {
+    slug: "load-governed-specs",
+    name: "Load governed specs",
+    description: "Load the current global, project-type, and project-scoped specifications before implementation work.",
+    instructions: "Before non-trivial work, use the SpecRegistry MCP get_specs tool for the configured project type and repository. Check the local manifest for drift. Treat published specs as authoritative and do not treat drafts as approved guidance.",
+  },
+  {
+    slug: "search-spec-context",
+    name: "Search spec context",
+    description: "Find focused governing sections without injecting the entire spec set into context.",
+    instructions: "Use search_specs in hybrid mode with concrete task terms, filenames, APIs, security concerns, and acceptance criteria. Cite the returned spec and section. Load full documents only when the focused sections are insufficient.",
+  },
+  {
+    slug: "report-spec-problems",
+    name: "Report spec problems",
+    description: "Report ambiguity, contradiction, or outdated guidance instead of guessing around it.",
+    instructions: "When guidance is ambiguous, contradictory, incomplete, or outdated, stop the affected decision and call report_spec_feedback. Include the spec, section, task, conflicting evidence, and the decision that needs clarification.",
+  },
+  {
+    slug: "plan-from-specs",
+    name: "Plan from specs",
+    description: "Turn governed requirements into an implementation plan and acceptance evidence.",
+    instructions: "Identify applicable specs and acceptance criteria before editing. Produce a concise plan that maps each implementation step and verification step to governing requirements. Call out missing coverage rather than inventing requirements.",
+  },
+  {
+    slug: "verify-conformance",
+    name: "Verify conformance",
+    description: "Check implementation results against the current governed specification set.",
+    instructions: "After implementation, run relevant tests and a reverse conformance check. Compare behavior, configuration, interfaces, and operational evidence with the current specs. Report violations and intent mismatches separately.",
+  },
+  {
+    slug: "collect-delivery-evidence",
+    name: "Collect delivery evidence",
+    description: "Record the tests, checks, and operational evidence that support a completed change.",
+    instructions: "Summarize commands run, test outcomes, affected specs, known residual risks, and any unverified requirement. Do not claim a check passed unless it was actually executed and its result observed.",
+  },
+] as const;
+
+function seedDefaultAgentSkills(db: Db): void {
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO agent_skills
+      (id, slug, name, description, instructions, risk_level, status, built_in, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'safe', 'active', 1, ?, ?)`
+  );
+  const ts = now();
+  for (const skill of DEFAULT_AGENT_SKILLS) {
+    insert.run(`builtin-${skill.slug}`, skill.slug, skill.name, skill.description, skill.instructions, ts, ts);
+  }
+}
 
 export function createDb(path: string): Db {
   const db = new Database(path);
@@ -420,6 +501,7 @@ export function createDb(path: string): Db {
     version = migration.version;
   }
   db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('schema_version', ?)").run(String(version));
+  seedDefaultAgentSkills(db);
   return db;
 }
 

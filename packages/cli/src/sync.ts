@@ -25,6 +25,18 @@ function readManifest(dir: string): Manifest {
   return JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Manifest;
 }
 
+function savedSkillSelection(): string {
+  const manifestPath = path.resolve(process.cwd(), ".spec/skills/manifest.json");
+  if (!fs.existsSync(manifestPath)) return "base";
+  try {
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as { skills?: Array<{ slug?: string }> };
+    const slugs = manifest.skills?.map((skill) => skill.slug).filter((slug): slug is string => Boolean(slug)) ?? [];
+    return slugs.length ? slugs.join(",") : "none";
+  } catch {
+    return "base";
+  }
+}
+
 export async function runSync(opts: SyncOptions): Promise<void> {
   const manifest = readManifest(opts.dir);
   const identity = repoIdentity();
@@ -73,6 +85,8 @@ export async function runSync(opts: SyncOptions): Promise<void> {
     dir: opts.dir,
     styleguides: "none",
     styleguideDir: ".spec/styleguides",
+    skills: savedSkillSelection(),
+    skillDir: ".spec/skills",
   });
   await runVerify({ server: opts.server, token: opts.token, dir: opts.dir, quiet: false });
   for (const target of compileTargets) {
