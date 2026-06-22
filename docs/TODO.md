@@ -30,6 +30,7 @@
 - Scheduled efficacy runner: the current scheduled-run endpoint is an on-demand batch.
   Add real schedules with cadence, ownership, retries, last-run status, result history,
   and notifications.
+- [ ] Architecture Boundary Violations Engine: Implement multi-language import graph checking (via dependency-cruiser for JS/TS, Import Linter for Python, and build-system/Bazel visibility rules or compiler checks for C++) alongside category-specific LLM auditing to detect and count layer boundary breaches in CI.
 
 ## Developer Workflow
 
