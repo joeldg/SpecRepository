@@ -1,0 +1,149 @@
+# Default values for specregistry.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# -- Number of replicas for the SpecRegistry application.
+# Note: Because the default database is SQLite, replicaCount should typically be 1 to prevent write conflicts.
+replicaCount: 1
+
+image:
+  # -- SpecRegistry image repository
+  repository: specregistry
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+# -- Image pull secrets for private registries
+imagePullSecrets: []
+# -- Overrides the chart name
+nameOverride: ""
+# -- Overrides the chart fullname
+fullnameOverride: ""
+
+service:
+  # -- Kubernetes Service type (ClusterIP, NodePort, LoadBalancer)
+  type: ClusterIP
+  # -- Kubernetes Service port
+  port: 4000
+
+ingress:
+  # -- Enable Ingress resource
+  enabled: false
+  # -- Ingress Class Name
+  className: ""
+  # -- Ingress Annotations
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  # -- Ingress Host configurations
+  hosts:
+    - host: specregistry.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  # -- Ingress TLS configurations
+  tls: []
+  #  - secretName: specregistry-tls
+  #    hosts:
+  #      - specregistry.local
+
+persistence:
+  # -- Enable Persistent Volume Claim for SQLite storage
+  enabled: true
+  # -- Storage Class Name for the PVC (optional)
+  storageClass: ""
+  # -- Access Mode for PVC
+  accessMode: ReadWriteOnce
+  # -- Storage size requested for SQLite DB
+  size: 5Gi
+  # -- Absolute mount path inside the container where SQLite DB is placed
+  mountPath: /data
+  # -- Use an existing PersistentVolumeClaim instead of creating one
+  existingClaim: ""
+
+# -- Pod Security Context settings (e.g. fsGroup for volume permissions)
+securityContext:
+  fsGroup: 2000
+
+# -- Container Security Context settings for the specregistry container
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1000
+
+# -- CPU/Memory resources limits and requests
+resources: {}
+  # limits:
+  #   cpu: 100m
+  #   memory: 256Mi
+  # requests:
+  #   cpu: 50m
+  #   memory: 128Mi
+
+# -- Node selector for pod placement
+nodeSelector: {}
+
+# -- Tolerations for pod placement
+tolerations: []
+
+# -- Affinity rules for pod placement
+affinity: {}
+
+# -- General non-sensitive environment variables
+env:
+  # -- Port that the application listens on. Should match containerPort.
+  PORT: "4000"
+  # -- The database file location. Should reside in the persistent volume mount path.
+  SPECREG_DB: "/data/specregistry.db"
+  # -- External public URL reachable by developers and agents (e.g. http://specs.example.com)
+  SPECREG_PUBLIC_URL: "http://localhost:4000"
+  # -- Authentication mode ("" to disable, or "required" to enable)
+  SPECREG_AUTH: ""
+  # -- Active LLM Provider (e.g. anthropic, openai, gemini, or openai-compatible)
+  LLM_PROVIDER: ""
+  # -- LLM model identifier (e.g. claude-3-5-sonnet-20241022)
+  LLM_MODEL: ""
+  # -- Custom LLM Base URL (useful for local Ollama/LM Studio or gateways)
+  LLM_BASE_URL: ""
+  # -- Max context tokens allowed for LLM prompts
+  LLM_MAX_TOKENS: "16000"
+
+# -- Sensitive environment variables that will be stored in a Kubernetes Secret
+secrets:
+  # -- Admin password when authentication is enabled. Default is "admin".
+  SPECREG_ADMIN_PASSWORD: "admin"
+  # -- Anthropic API key
+  ANTHROPIC_API_KEY: ""
+  # -- OpenAI API key
+  OPENAI_API_KEY: ""
+  # -- Gemini API key
+  GEMINI_API_KEY: ""
+  # -- LLM Gateway API key (if using custom provider)
+  LLM_API_KEY: ""
+  # -- GitHub Token for repository subscriptions and two-way sync
+  GITHUB_TOKEN: ""
+  # -- Secret used to verify incoming GitHub webhooks
+  GITHUB_WEBHOOK_SECRET: ""
+  # -- Secret used to verify incoming Slack webhooks/interactive actions
+  SLACK_SIGNING_SECRET: ""
+
+# -- Configuration for optional Grafana Alloy metrics agent sidecar/deployment
+alloy:
+  # -- Enable Grafana Alloy deployment to scrape metrics and remote-write upstream
+  enabled: false
+  image:
+    repository: grafana/alloy
+    tag: latest
+    pullPolicy: IfNotPresent
+  # -- Remote write configuration for Grafana Cloud / Prometheus remote write endpoint
+  remoteWrite:
+    url: ""
+    username: ""
+    password: ""
+  # -- Port that Grafana Alloy exposes its internal HTTP server on
+  port: 12345

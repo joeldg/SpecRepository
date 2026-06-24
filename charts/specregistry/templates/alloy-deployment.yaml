@@ -1,0 +1,66 @@
+{{- if .Values.alloy.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "specregistry.fullname" . }}-alloy
+  labels:
+    {{- include "specregistry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: alloy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "specregistry.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: alloy
+  template:
+    metadata:
+      labels:
+        {{- include "specregistry.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: alloy
+    spec:
+      containers:
+        - name: alloy
+          image: "{{ .Values.alloy.image.repository }}:{{ .Values.alloy.image.tag }}"
+          imagePullPolicy: {{ .Values.alloy.image.pullPolicy }}
+          command:
+            - run
+            - /etc/alloy/config.alloy
+            - --server.http.listen-addr=0.0.0.0:{{ .Values.alloy.port | default 12345 }}
+          ports:
+            - name: alloy-http
+              containerPort: {{ .Values.alloy.port | default 12345 }}
+              protocol: TCP
+          env:
+            - name: GRAFANA_REMOTE_WRITE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "specregistry.fullname" . }}-alloy-secrets
+                  key: GRAFANA_REMOTE_WRITE_URL
+                  optional: true
+            - name: GRAFANA_REMOTE_WRITE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "specregistry.fullname" . }}-alloy-secrets
+                  key: GRAFANA_REMOTE_WRITE_USERNAME
+                  optional: true
+            - name: GRAFANA_REMOTE_WRITE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "specregistry.fullname" . }}-alloy-secrets
+                  key: GRAFANA_REMOTE_WRITE_PASSWORD
+                  optional: true
+          volumeMounts:
+            - name: alloy-config
+              mountPath: /etc/alloy
+          resources:
+            limits:
+              cpu: 200m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+      volumes:
+        - name: alloy-config
+          configMap:
+            name: {{ include "specregistry.fullname" . }}-alloy-config
+{{- end }}

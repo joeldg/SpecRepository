@@ -1,0 +1,15 @@
+apiVersion: v2
+name: specregistry
+description: Centralized management, versioning, and distribution of Markdown project specifications
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - specregistry
+  - sdd
+  - governance
+  - markdown
+  - kubernetes
+home: https://github.com/joeldg/SpecRepository
+sources:
+  - https://github.com/joeldg/SpecRepository

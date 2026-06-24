@@ -1,0 +1,19 @@
+{{- if .Values.alloy.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "specregistry.fullname" . }}-alloy
+  labels:
+    {{- include "specregistry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: alloy
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.alloy.port | default 12345 }}
+      targetPort: alloy-http
+      protocol: TCP
+      name: alloy-http
+  selector:
+    {{- include "specregistry.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: alloy
+{{- end }}

@@ -1,0 +1,28 @@
+{{- if .Values.alloy.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "specregistry.fullname" . }}-alloy-config
+  labels:
+    {{- include "specregistry.labels" . | nindent 4 }}
+data:
+  config.alloy: |
+    prometheus.scrape "specregistry" {
+      targets = [
+        { "__address__" = "{{ include "specregistry.fullname" . }}:{{ .Values.service.port }}" },
+      ]
+      metrics_path = "/metrics"
+      forward_to = [prometheus.remote_write.grafana.receiver]
+    }
+
+    prometheus.remote_write "grafana" {
+      endpoint {
+        url = env("GRAFANA_REMOTE_WRITE_URL")
+
+        basic_auth {
+          username = env("GRAFANA_REMOTE_WRITE_USERNAME")
+          password = env("GRAFANA_REMOTE_WRITE_PASSWORD")
+        }
+      }
+    }
+{{- end }}
