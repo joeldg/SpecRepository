@@ -8,3 +8,5 @@ dist/
 .env
 packages/web/dist/
 *.tgz
+*:Zone.Identifier
+docs/AI-SDD*
