@@ -89,6 +89,7 @@ export function analyzeContradictions(db: Db, spec: Spec, proposedContent: strin
        FROM specs s JOIN project_types pt ON pt.id = s.project_type_id
        WHERE s.id != ?
          AND s.status IN ('published', 'pending_review')
+         AND s.deleted_at IS NULL
          AND (s.project_type_id = ? OR pt.scope = 'global')`
     )
     .all(spec.id, spec.project_type_id) as Array<{

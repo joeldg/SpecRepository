@@ -211,7 +211,7 @@ export async function reindexSemanticSpec(db: Db, spec: Pick<Spec, "id" | "conte
 }
 
 export async function reindexSemanticAll(db: Db, config = getEmbeddingConfig(db)): Promise<{ indexed_sections: number; provider: string; model: string }> {
-  const specs = db.prepare("SELECT id, content FROM specs WHERE status != 'draft'").all() as Array<Pick<Spec, "id" | "content">>;
+  const specs = db.prepare("SELECT id, content FROM specs WHERE status != 'draft' AND deleted_at IS NULL").all() as Array<Pick<Spec, "id" | "content">>;
   let indexed = 0;
   for (const spec of specs) indexed += await reindexSemanticSpec(db, spec, config);
   return { indexed_sections: indexed, provider: config.provider, model: config.model };

@@ -54,7 +54,7 @@ export function requireProjectConsumer(db: Db, idOrRepo: string, projectTypeId?:
 }
 
 export function requireSpec(db: Db, id: string): Spec {
-  const spec = db.prepare("SELECT * FROM specs WHERE id = ?").get(id) as Spec | undefined;
+  const spec = db.prepare("SELECT * FROM specs WHERE id = ? AND deleted_at IS NULL").get(id) as Spec | undefined;
   if (!spec) throw new HttpError(404, `Unknown spec: ${id}`);
   return spec;
 }

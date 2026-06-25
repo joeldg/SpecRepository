@@ -486,6 +486,12 @@ export const api = {
     request<Spec>("/api/v1/specs", { method: "POST", body: JSON.stringify(body) }),
   deleteSpec: (id: string) =>
     requestVoid(`/api/v1/specs/${encodeURIComponent(id)}`, { method: "DELETE", body: JSON.stringify({ confirm: true }) }),
+  restoreSpec: (id: string) =>
+    request<Spec>(`/api/v1/specs/${encodeURIComponent(id)}/restore`, { method: "POST" }),
+  deletedSpecs: () =>
+    request<Array<SpecSummary & { deleted_at: string }>>("/api/v1/specs/deleted"),
+  purgeSpecs: () =>
+    request<{ purged: number; filenames: string[] }>("/api/v1/specs/purge", { method: "POST" }),
   updateDraft: (id: string, body: { content: string; updated_by: string }) =>
     request<Spec>(`/api/v1/specs/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   publishDraft: (id: string, published_by: string) =>

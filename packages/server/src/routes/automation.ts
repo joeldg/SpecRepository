@@ -325,7 +325,7 @@ export async function automationRoutes(app: FastifyInstance): Promise<void> {
     const { project_type } = req.query as { project_type?: string };
     const specs = project_type
       ? governedSpecs(app, project_type)
-      : (app.db.prepare("SELECT * FROM specs WHERE status = 'published' ORDER BY filename").all() as AutomationSpecInput[]);
+      : (app.db.prepare("SELECT * FROM specs WHERE status = 'published' AND deleted_at IS NULL ORDER BY filename").all() as AutomationSpecInput[]);
     return {
       project_type: project_type ?? null,
       prompts: specs.map((spec) => ({

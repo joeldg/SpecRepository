@@ -193,9 +193,9 @@ export function seed(db: Db): boolean {
   seedTemplates(db);
   seedAdmin(db);
   // Backfill missing audit prompts for existing specs (runs once after migration 15)
-  const missing = db.prepare("SELECT COUNT(*) AS n FROM specs WHERE audit_prompt IS NULL OR audit_prompt = ''").get() as { n: number };
+  const missing = db.prepare("SELECT COUNT(*) AS n FROM specs WHERE (audit_prompt IS NULL OR audit_prompt = '') AND deleted_at IS NULL").get() as { n: number };
   if (missing.n > 0) {
-    const specs = db.prepare("SELECT id, filename, content, current_version FROM specs WHERE audit_prompt IS NULL OR audit_prompt = ''").all() as Array<{
+    const specs = db.prepare("SELECT id, filename, content, current_version FROM specs WHERE (audit_prompt IS NULL OR audit_prompt = '') AND deleted_at IS NULL").all() as Array<{
       id: string;
       filename: string;
       content: string;

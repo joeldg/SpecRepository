@@ -28,6 +28,7 @@ export interface Spec {
   content: string;
   updated_by: string;
   audit_prompt?: string | null;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
 }

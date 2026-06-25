@@ -30,7 +30,7 @@ import { renderSkillMarkdown, type AgentSkillRecord } from "../lib/skills.js";
 
 const SUMMARY_SELECT = `
   SELECT s.id, s.project_type_id, s.project_id, s.filename, s.current_version, s.status,
-         s.updated_by, s.created_at, s.updated_at,
+         s.updated_by, s.created_at, s.updated_at, s.deleted_at,
          pt.name AS project_type_name, pt.scope AS project_type_scope,
          rc.repo AS project_name,
          CASE WHEN s.project_id IS NOT NULL THEN 'project' ELSE pt.scope END AS effective_scope,
@@ -39,6 +39,7 @@ const SUMMARY_SELECT = `
   FROM specs s
   JOIN project_types pt ON pt.id = s.project_type_id
   LEFT JOIN repo_consumers rc ON rc.id = s.project_id
+  WHERE s.deleted_at IS NULL
 `;
 
 function projectFromQuery(
@@ -160,8 +161,8 @@ export async function specRoutes(app: FastifyInstance): Promise<void> {
     if (!pt) throw new HttpError(404, `Unknown project type: ${projectTypeId}`);
     const project = projectId ? requireProjectConsumer(app.db, projectId, pt.id) : undefined;
     const duplicate = project
-      ? app.db.prepare("SELECT id FROM specs WHERE project_id = ? AND filename = ?").get(project.id, filename)
-      : app.db.prepare("SELECT id FROM specs WHERE project_type_id = ? AND project_id IS NULL AND filename = ?").get(pt.id, filename);
+      ? app.db.prepare("SELECT id FROM specs WHERE project_id = ? AND filename = ? AND deleted_at IS NULL").get(project.id, filename)
+      : app.db.prepare("SELECT id FROM specs WHERE project_type_id = ? AND project_id IS NULL AND filename = ? AND deleted_at IS NULL").get(pt.id, filename);
     if (duplicate) throw new HttpError(409, `Spec ${filename} already exists for ${pt.name}`);
 
     const id = uuid();
@@ -367,7 +368,7 @@ export async function specRoutes(app: FastifyInstance): Promise<void> {
     return cr;
   });
 
-  // Admin-only: permanently delete a spec and all related data.
+  // Admin-only: soft-delete a spec (retained for 14 days before purge).
   app.delete("/specs/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = (req.body ?? {}) as Record<string, unknown>;
@@ -376,39 +377,102 @@ export async function specRoutes(app: FastifyInstance): Promise<void> {
       throw new HttpError(400, "Deletion requires { confirm: true } in the request body");
     }
 
-    const spec = app.db.prepare("SELECT * FROM specs WHERE id = ?").get(id) as Spec | undefined;
+    const spec = app.db.prepare("SELECT * FROM specs WHERE id = ? AND deleted_at IS NULL").get(id) as Spec | undefined;
     if (!spec) throw new HttpError(404, `Unknown spec: ${id}`);
 
-    // Cascading cleanup in a transaction
-    const deleteAll = app.db.transaction(() => {
-      // review_approvals reference change_requests, which reference specs
-      app.db.prepare(
-        "DELETE FROM review_approvals WHERE change_request_id IN (SELECT id FROM change_requests WHERE spec_id = ?)"
-      ).run(id);
-      app.db.prepare("DELETE FROM change_requests WHERE spec_id = ?").run(id);
-      app.db.prepare("DELETE FROM spec_versions WHERE spec_id = ?").run(id);
-      app.db.prepare("DELETE FROM agent_feedback WHERE spec_id = ?").run(id);
-      app.db.prepare("DELETE FROM sync_jobs WHERE spec_id = ?").run(id);
-      app.db.prepare("DELETE FROM efficacy_runs WHERE spec_id = ?").run(id);
-      // FTS virtual table
-      app.db.prepare("DELETE FROM spec_chunks WHERE spec_id = ?").run(id);
-      // These have ON DELETE CASCADE but explicit for clarity
-      app.db.prepare("DELETE FROM spec_embeddings WHERE spec_id = ?").run(id);
-      // Finally, the spec itself
-      app.db.prepare("DELETE FROM specs WHERE id = ?").run(id);
-    });
+    const ts = now();
+    app.db.prepare("UPDATE specs SET deleted_at = ?, updated_at = ? WHERE id = ?").run(ts, ts, id);
 
-    deleteAll();
+    // Remove from search index immediately
+    app.db.prepare("DELETE FROM spec_chunks WHERE spec_id = ?").run(id);
+    app.db.prepare("DELETE FROM spec_embeddings WHERE spec_id = ?").run(id);
 
     recordAudit(app.db, {
       actor: actorFrom(req, "admin"),
       action: "spec.deleted",
       target_type: "spec",
       target_id: id,
-      summary: `Spec permanently deleted: ${spec.filename}`,
+      summary: `Spec soft-deleted: ${spec.filename} (retained 14 days)`,
       detail: { filename: spec.filename, version: spec.current_version, status: spec.status },
     });
 
     reply.code(204);
+  });
+
+  // Admin-only: restore a soft-deleted spec.
+  app.post("/specs/:id/restore", async (req) => {
+    const { id } = req.params as { id: string };
+    const spec = app.db.prepare("SELECT * FROM specs WHERE id = ?").get(id) as Spec | undefined;
+    if (!spec) throw new HttpError(404, `Unknown spec: ${id}`);
+    if (!spec.deleted_at) throw new HttpError(400, "Spec is not deleted");
+
+    const ts = now();
+    app.db.prepare("UPDATE specs SET deleted_at = NULL, updated_at = ? WHERE id = ?").run(ts, id);
+
+    // Rebuild search index for this spec
+    try { reindexSpecSearch(app.db, { id, content: spec.content }); } catch { /* non-fatal */ }
+
+    recordAudit(app.db, {
+      actor: actorFrom(req, "admin"),
+      action: "spec.restored",
+      target_type: "spec",
+      target_id: id,
+      summary: `Spec restored: ${spec.filename}`,
+      detail: { filename: spec.filename, version: spec.current_version },
+    });
+
+    return app.db.prepare("SELECT * FROM specs WHERE id = ?").get(id) as Spec;
+  });
+
+  // Admin-only: list soft-deleted specs.
+  app.get("/specs/deleted", async () => {
+    return app.db.prepare(
+      `SELECT s.id, s.project_type_id, s.filename, s.current_version, s.status,
+              s.updated_by, s.deleted_at, s.created_at, s.updated_at,
+              pt.name AS project_type_name
+       FROM specs s
+       JOIN project_types pt ON pt.id = s.project_type_id
+       WHERE s.deleted_at IS NOT NULL
+       ORDER BY s.deleted_at DESC`
+    ).all();
+  });
+
+  // Admin-only: permanently purge soft-deleted specs older than 14 days.
+  app.post("/specs/purge", async (req) => {
+    const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+    const expired = app.db.prepare(
+      "SELECT id, filename FROM specs WHERE deleted_at IS NOT NULL AND deleted_at < ?"
+    ).all(cutoff) as Array<{ id: string; filename: string }>;
+
+    const purge = app.db.transaction(() => {
+      for (const s of expired) {
+        app.db.prepare(
+          "DELETE FROM review_approvals WHERE change_request_id IN (SELECT id FROM change_requests WHERE spec_id = ?)"
+        ).run(s.id);
+        app.db.prepare("DELETE FROM change_requests WHERE spec_id = ?").run(s.id);
+        app.db.prepare("DELETE FROM spec_versions WHERE spec_id = ?").run(s.id);
+        app.db.prepare("DELETE FROM agent_feedback WHERE spec_id = ?").run(s.id);
+        app.db.prepare("DELETE FROM sync_jobs WHERE spec_id = ?").run(s.id);
+        app.db.prepare("DELETE FROM efficacy_runs WHERE spec_id = ?").run(s.id);
+        app.db.prepare("DELETE FROM spec_chunks WHERE spec_id = ?").run(s.id);
+        app.db.prepare("DELETE FROM spec_embeddings WHERE spec_id = ?").run(s.id);
+        app.db.prepare("DELETE FROM specs WHERE id = ?").run(s.id);
+      }
+    });
+
+    purge();
+
+    if (expired.length > 0) {
+      recordAudit(app.db, {
+        actor: actorFrom(req, "admin"),
+        action: "spec.purged",
+        target_type: "spec",
+        target_id: "batch",
+        summary: `Purged ${expired.length} soft-deleted spec(s) older than 14 days`,
+        detail: { purged: expired.map(s => s.filename) },
+      });
+    }
+
+    return { purged: expired.length, filenames: expired.map(s => s.filename) };
   });
 }

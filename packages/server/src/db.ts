@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS specs (
   content TEXT NOT NULL,
   updated_by TEXT NOT NULL,
   audit_prompt TEXT,
+  deleted_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -414,6 +415,10 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
   {
     version: 15,
     sql: "ALTER TABLE specs ADD COLUMN audit_prompt TEXT"
+  },
+  {
+    version: 16,
+    sql: "ALTER TABLE specs ADD COLUMN deleted_at TEXT"
   },
 ];
 

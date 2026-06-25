@@ -61,7 +61,7 @@ export function bundleSpecs(db: Db, projectTypeId: string, channel = "stable", p
       `SELECT s.*, pt.scope AS project_type_scope, rc.repo AS project_name FROM specs s
        JOIN project_types pt ON pt.id = s.project_type_id
        LEFT JOIN repo_consumers rc ON rc.id = s.project_id
-       WHERE s.status != 'draft'
+       WHERE s.status != 'draft' AND s.deleted_at IS NULL
          AND (
           (s.project_id IS NULL AND (pt.id = ? OR pt.scope = 'global'))
           OR (? IS NOT NULL AND s.project_id = ?)

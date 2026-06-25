@@ -169,10 +169,10 @@ export default function SpecDetailPage() {
       {confirmDelete && (
         <div className="card" style={{ marginBottom: 14, border: "1px solid var(--danger)", padding: 16 }}>
           <p style={{ margin: "0 0 12px", fontWeight: 600 }}>
-            ⚠ Permanently delete <code>{spec.filename}</code>?
+            ⚠ Delete <code>{spec.filename}</code>?
           </p>
           <p className="dim" style={{ margin: "0 0 12px", fontSize: 13 }}>
-            This will remove all versions, change requests, reviews, feedback, and related data. This action cannot be undone.
+            This spec will be hidden and retained for 14 days before permanent removal. An admin can restore it during that window.
           </p>
           <div style={{ display: "flex", gap: 8 }}>
             <button
@@ -190,7 +190,7 @@ export default function SpecDetailPage() {
                 }
               }}
             >
-              {deleting ? "Deleting..." : "Yes, permanently delete"}
+              {deleting ? "Deleting..." : "Yes, delete spec"}
             </button>
             <button onClick={() => setConfirmDelete(false)} disabled={deleting}>
               Cancel

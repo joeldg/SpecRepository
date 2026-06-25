@@ -99,7 +99,7 @@ export async function integrationRoutes(app: FastifyInstance): Promise<void> {
         const spec = app.db
           .prepare(
             `SELECT s.* FROM specs s JOIN project_types pt ON pt.id = s.project_type_id
-             WHERE s.filename = ? AND s.status != 'draft' AND (pt.id = ? OR pt.scope = 'global')
+             WHERE s.filename = ? AND s.status != 'draft' AND s.deleted_at IS NULL AND (pt.id = ? OR pt.scope = 'global')
              ORDER BY pt.id = ? DESC LIMIT 1`
           )
           .get(filename, sub.project_type_id, sub.project_type_id) as Spec | undefined;

@@ -4,6 +4,8 @@ import type { SpecSummary, SpecTemplate } from "@specregistry/shared";
 import { api, getAuthor, type ProjectTypeWithCount } from "../api";
 import { StatusBadge, timeAgo } from "../components";
 
+type DeletedSpec = SpecSummary & { deleted_at: string };
+
 export default function SpecsPage() {
   const [specs, setSpecs] = useState<SpecSummary[]>([]);
   const [types, setTypes] = useState<ProjectTypeWithCount[]>([]);
@@ -12,6 +14,9 @@ export default function SpecsPage() {
   const [creating, setCreating] = useState(false);
   const [newTypeId, setNewTypeId] = useState("");
   const [newFilename, setNewFilename] = useState("");
+  const [showDeleted, setShowDeleted] = useState(false);
+  const [deletedSpecs, setDeletedSpecs] = useState<DeletedSpec[]>([]);
+  const [restoring, setRestoring] = useState<string | null>(null);
   const navigate = useNavigate();
 
   function reload() {
@@ -26,6 +31,10 @@ export default function SpecsPage() {
   }
 
   useEffect(reload, []);
+
+  function loadDeleted() {
+    api.deletedSpecs().then(setDeletedSpecs).catch((e) => setError(e.message));
+  }
 
   const grouped = useMemo(() => {
     const groups = new Map<string, SpecSummary[]>();
@@ -136,6 +145,76 @@ export default function SpecsPage() {
           </table>
         </div>
       ))}
+
+      <div className="section" style={{ marginTop: 24 }}>
+        <button
+          style={{ fontSize: 13, opacity: 0.7 }}
+          onClick={() => {
+            const next = !showDeleted;
+            setShowDeleted(next);
+            if (next) loadDeleted();
+          }}
+        >
+          {showDeleted ? "▾ Hide deleted specs" : "▸ Show deleted specs"}
+        </button>
+        {showDeleted && (
+          <>
+            {deletedSpecs.length === 0 ? (
+              <p className="dim" style={{ marginTop: 8 }}>No deleted specs.</p>
+            ) : (
+              <table className="grid" style={{ marginTop: 8 }}>
+                <thead>
+                  <tr>
+                    <th>File</th>
+                    <th>Project type</th>
+                    <th>Version</th>
+                    <th>Deleted</th>
+                    <th>Purge in</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {deletedSpecs.map((ds) => {
+                    const deletedDate = new Date(ds.deleted_at);
+                    const purgeDate = new Date(deletedDate.getTime() + 14 * 24 * 60 * 60 * 1000);
+                    const daysLeft = Math.max(0, Math.ceil((purgeDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+                    return (
+                      <tr key={ds.id} style={{ opacity: 0.7 }}>
+                        <td className="mono">{ds.filename}</td>
+                        <td>{ds.project_type_name}</td>
+                        <td className="mono">{ds.current_version}</td>
+                        <td className="faint">{timeAgo(ds.deleted_at)}</td>
+                        <td className="faint">{daysLeft}d</td>
+                        <td>
+                          <button
+                            className="success"
+                            style={{ fontSize: 12 }}
+                            disabled={restoring === ds.id}
+                            onClick={async () => {
+                              setRestoring(ds.id);
+                              try {
+                                await api.restoreSpec(ds.id);
+                                reload();
+                                loadDeleted();
+                              } catch (e) {
+                                setError((e as Error).message);
+                              } finally {
+                                setRestoring(null);
+                              }
+                            }}
+                          >
+                            {restoring === ds.id ? "Restoring..." : "Restore"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </>
+        )}
+      </div>
     </>
   );
 }

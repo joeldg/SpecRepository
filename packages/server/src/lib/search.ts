@@ -42,7 +42,7 @@ export async function reindexSpecSearch(db: Db, spec: Pick<Spec, "id" | "content
 /** Rebuild the whole index from published specs (startup / after seed). */
 export function reindexAll(db: Db): void {
   db.prepare("DELETE FROM spec_chunks").run();
-  const specs = db.prepare("SELECT id, content FROM specs WHERE status != 'draft'").all() as Array<
+  const specs = db.prepare("SELECT id, content FROM specs WHERE status != 'draft' AND deleted_at IS NULL").all() as Array<
     Pick<Spec, "id" | "content">
   >;
   for (const spec of specs) reindexSpec(db, spec);
