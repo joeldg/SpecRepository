@@ -3,6 +3,7 @@ import { HttpError, requireOneOf, requireString } from "../helpers.js";
 import {
   createUser,
   findUser,
+  hashPassword,
   issueToken,
   ldapAuthenticate,
   ldapEnabled,
@@ -128,5 +129,49 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       summary: "API key revoked",
     });
     reply.code(204);
+  });
+
+  // Password change: self-service (any user for own account) or admin reset (any account).
+  app.put("/auth/users/:id/password", async (req) => {
+    const { id: targetId } = req.params as { id: string };
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const newPassword = requireString(body, "new_password");
+    if (newPassword.length < 4) throw new HttpError(400, "Password must be at least 4 characters");
+
+    const target = app.db.prepare("SELECT * FROM users WHERE id = ?").get(targetId) as
+      | Record<string, unknown>
+      | undefined;
+    if (!target) throw new HttpError(404, `Unknown user: ${targetId}`);
+
+    const isSelf = req.user?.id === targetId;
+    const isAdmin = req.user?.role === "admin";
+
+    if (!isSelf && !isAdmin) {
+      throw new HttpError(403, "Only admins can reset other users' passwords");
+    }
+
+    // Self-service: verify current password
+    if (isSelf && !isAdmin) {
+      const currentPassword = typeof body.current_password === "string" ? body.current_password : "";
+      if (!currentPassword) throw new HttpError(400, "current_password is required for self-service password change");
+      if (!target.password_hash || !verifyPassword(currentPassword, target.password_hash as string)) {
+        throw new HttpError(401, "Current password is incorrect");
+      }
+    }
+
+    const hashed = hashPassword(newPassword);
+    app.db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashed, targetId);
+
+    recordAudit(app.db, {
+      actor: actorFrom(req, "admin"),
+      action: isSelf ? "user.password_changed" : "user.password_reset",
+      target_type: "user",
+      target_id: targetId,
+      summary: isSelf
+        ? `${req.user?.username} changed their password`
+        : `Admin reset password for ${target.username}`,
+    });
+
+    return { success: true };
   });
 }

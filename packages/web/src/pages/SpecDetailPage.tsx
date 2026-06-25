@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, getAuthor, type SpecDetail } from "../api";
 import { DiffView, Markdown, StatusBadge, timeAgo } from "../components";
 
@@ -13,6 +13,9 @@ export default function SpecDetailPage() {
   const [delta, setDelta] = useState("minor");
   const [summary, setSummary] = useState("");
   const [viewVersion, setViewVersion] = useState<string>();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const navigate = useNavigate();
 
   const reload = useCallback(() => {
     if (!id) return;
@@ -153,7 +156,48 @@ export default function SpecDetailPage() {
             </select>
           )}
         </div>
+        <button
+          className="danger"
+          style={{ marginLeft: 8 }}
+          onClick={() => setConfirmDelete(true)}
+          disabled={deleting}
+        >
+          Delete spec
+        </button>
       </div>
+
+      {confirmDelete && (
+        <div className="card" style={{ marginBottom: 14, border: "1px solid var(--danger)", padding: 16 }}>
+          <p style={{ margin: "0 0 12px", fontWeight: 600 }}>
+            ⚠ Permanently delete <code>{spec.filename}</code>?
+          </p>
+          <p className="dim" style={{ margin: "0 0 12px", fontSize: 13 }}>
+            This will remove all versions, change requests, reviews, feedback, and related data. This action cannot be undone.
+          </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              className="danger"
+              disabled={deleting}
+              onClick={async () => {
+                setDeleting(true);
+                try {
+                  await api.deleteSpec(spec.id);
+                  navigate("/specs");
+                } catch (e) {
+                  setError((e as Error).message);
+                  setDeleting(false);
+                  setConfirmDelete(false);
+                }
+              }}
+            >
+              {deleting ? "Deleting..." : "Yes, permanently delete"}
+            </button>
+            <button onClick={() => setConfirmDelete(false)} disabled={deleting}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {editing ? (
         <div className="split">

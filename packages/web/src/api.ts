@@ -484,6 +484,8 @@ export const api = {
   specImpact: (id: string, delta = "minor") => request<SpecImpactResponse>(`/api/v1/specs/${id}/impact?delta=${encodeURIComponent(delta)}`),
   createSpec: (body: { project_type_id: string; filename: string; content: string; updated_by: string }) =>
     request<Spec>("/api/v1/specs", { method: "POST", body: JSON.stringify(body) }),
+  deleteSpec: (id: string) =>
+    requestVoid(`/api/v1/specs/${encodeURIComponent(id)}`, { method: "DELETE", body: JSON.stringify({ confirm: true }) }),
   updateDraft: (id: string, body: { content: string; updated_by: string }) =>
     request<Spec>(`/api/v1/specs/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   publishDraft: (id: string, published_by: string) =>
@@ -581,6 +583,11 @@ export const api = {
   users: () => request<UserRow[]>("/api/v1/auth/users"),
   createUser: (body: { username: string; role: string; password?: string; display_name?: string }) =>
     request<UserRow>("/api/v1/auth/users", { method: "POST", body: JSON.stringify(body) }),
+  changePassword: (userId: string, body: { current_password?: string; new_password: string }) =>
+    request<{ success: boolean }>(`/api/v1/auth/users/${encodeURIComponent(userId)}/password`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
   apiKeys: () => request<ApiKeyRow[]>("/api/v1/auth/api-keys"),
   createApiKey: (body: { username: string; name?: string }) =>
     request<{ token: string; username: string; role: string }>("/api/v1/auth/api-keys", {

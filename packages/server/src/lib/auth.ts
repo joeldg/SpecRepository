@@ -273,6 +273,7 @@ const PUBLIC_PATHS = [
 const POLICIES: Array<{ method: RegExp; path: RegExp; min: Role }> = [
   { method: /POST/, path: /^\/api\/v1\/reviews\/[^/]+\/(approve|reject)$/, min: "reviewer" },
   { method: /POST/, path: /^\/api\/v1\/specs\/[^/]+\/promote$/, min: "reviewer" },
+  { method: /DELETE/, path: /^\/api\/v1\/specs\//, min: "admin" },
   { method: /GET|POST|PUT|DELETE/, path: /^\/api\/v1\/(ldap|llm|embeddings|app-keys)(\/|$)/, min: "admin" },
   { method: /GET/, path: /^\/api\/v1\/audit-log$/, min: "admin" },
   { method: /GET/, path: /^\/api\/v1\/cli\/consumers$/, min: "admin" },
@@ -282,7 +283,8 @@ const POLICIES: Array<{ method: RegExp; path: RegExp; min: Role }> = [
   { method: /POST/, path: /^\/api\/v1\/spec-generation\/preview$/, min: "author" },
   { method: /POST/, path: /^\/api\/v1\/automation\//, min: "author" },
   { method: /POST/, path: /^\/api\/v1\/sync-jobs\/run$/, min: "admin" },
-  { method: /GET|POST|PUT|DELETE/, path: /^\/api\/v1\/auth\/users(\/|$)/, min: "admin" },
+  { method: /PUT/, path: /^\/api\/v1\/auth\/users\/[^/]+\/password$/, min: "agent" },
+  { method: /GET|POST|DELETE/, path: /^\/api\/v1\/auth\/users(\/|$)/, min: "admin" },
   { method: /GET|POST|DELETE/, path: /^\/api\/v1\/auth\/api-keys(\/|$)/, min: "admin" },
   { method: /POST|PUT/, path: /^\/api\/v1\/specs(\/|$)/, min: "author" },
   { method: /POST|PUT/, path: /^\/api\/v1\/project-types(\/|$)/, min: "author" },

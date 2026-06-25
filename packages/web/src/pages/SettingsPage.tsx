@@ -98,6 +98,10 @@ export default function SettingsPage() {
   const [newRole, setNewRole] = useState("author");
   const [newPassword, setNewPassword] = useState("");
   const [keyUsername, setKeyUsername] = useState("");
+  const [pwResetUserId, setPwResetUserId] = useState<string | null>(null);
+  const [pwResetValue, setPwResetValue] = useState("");
+  const [pwResetConfirm, setPwResetConfirm] = useState("");
+  const [pwResetSaving, setPwResetSaving] = useState(false);
   const [keyName, setKeyName] = useState("api key");
   const [ldapPassword, setLdapPassword] = useState("");
   const [ldapTestUsername, setLdapTestUsername] = useState("");
@@ -292,6 +296,7 @@ export default function SettingsPage() {
                 <th>Role</th>
                 <th>Source</th>
                 <th>Created</th>
+                <th style={{ width: 200 }}>Password</th>
               </tr>
             </thead>
             <tbody>
@@ -304,6 +309,72 @@ export default function SettingsPage() {
                   </td>
                   <td>{u.source}</td>
                   <td className="faint">{timeAgo(u.created_at)}</td>
+                  <td>
+                    {pwResetUserId === u.id ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        <input
+                          type="password"
+                          placeholder="New password"
+                          value={pwResetValue}
+                          onChange={(e) => setPwResetValue(e.target.value)}
+                          style={{ width: "100%" }}
+                        />
+                        <input
+                          type="password"
+                          placeholder="Confirm password"
+                          value={pwResetConfirm}
+                          onChange={(e) => setPwResetConfirm(e.target.value)}
+                          style={{ width: "100%" }}
+                        />
+                        <div style={{ display: "flex", gap: 4 }}>
+                          <button
+                            className="primary"
+                            disabled={pwResetSaving || !pwResetValue || pwResetValue !== pwResetConfirm}
+                            onClick={async () => {
+                              setPwResetSaving(true);
+                              try {
+                                await api.changePassword(u.id, { new_password: pwResetValue });
+                                setPwResetUserId(null);
+                                setPwResetValue("");
+                                setPwResetConfirm("");
+                                setError(undefined);
+                              } catch (e) {
+                                setError((e as Error).message);
+                              } finally {
+                                setPwResetSaving(false);
+                              }
+                            }}
+                          >
+                            {pwResetSaving ? "Saving..." : "Save"}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setPwResetUserId(null);
+                              setPwResetValue("");
+                              setPwResetConfirm("");
+                            }}
+                            disabled={pwResetSaving}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                        {pwResetValue && pwResetConfirm && pwResetValue !== pwResetConfirm && (
+                          <span style={{ color: "var(--danger)", fontSize: 11 }}>Passwords don't match</span>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        style={{ fontSize: 12 }}
+                        onClick={() => {
+                          setPwResetUserId(u.id);
+                          setPwResetValue("");
+                          setPwResetConfirm("");
+                        }}
+                      >
+                        Reset password
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

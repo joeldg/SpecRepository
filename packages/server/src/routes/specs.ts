@@ -366,4 +366,49 @@ export async function specRoutes(app: FastifyInstance): Promise<void> {
     reply.code(201);
     return cr;
   });
+
+  // Admin-only: permanently delete a spec and all related data.
+  app.delete("/specs/:id", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = (req.body ?? {}) as Record<string, unknown>;
+
+    if (body.confirm !== true) {
+      throw new HttpError(400, "Deletion requires { confirm: true } in the request body");
+    }
+
+    const spec = app.db.prepare("SELECT * FROM specs WHERE id = ?").get(id) as Spec | undefined;
+    if (!spec) throw new HttpError(404, `Unknown spec: ${id}`);
+
+    // Cascading cleanup in a transaction
+    const deleteAll = app.db.transaction(() => {
+      // review_approvals reference change_requests, which reference specs
+      app.db.prepare(
+        "DELETE FROM review_approvals WHERE change_request_id IN (SELECT id FROM change_requests WHERE spec_id = ?)"
+      ).run(id);
+      app.db.prepare("DELETE FROM change_requests WHERE spec_id = ?").run(id);
+      app.db.prepare("DELETE FROM spec_versions WHERE spec_id = ?").run(id);
+      app.db.prepare("DELETE FROM agent_feedback WHERE spec_id = ?").run(id);
+      app.db.prepare("DELETE FROM sync_jobs WHERE spec_id = ?").run(id);
+      app.db.prepare("DELETE FROM efficacy_runs WHERE spec_id = ?").run(id);
+      // FTS virtual table
+      app.db.prepare("DELETE FROM spec_chunks WHERE spec_id = ?").run(id);
+      // These have ON DELETE CASCADE but explicit for clarity
+      app.db.prepare("DELETE FROM spec_embeddings WHERE spec_id = ?").run(id);
+      // Finally, the spec itself
+      app.db.prepare("DELETE FROM specs WHERE id = ?").run(id);
+    });
+
+    deleteAll();
+
+    recordAudit(app.db, {
+      actor: actorFrom(req, "admin"),
+      action: "spec.deleted",
+      target_type: "spec",
+      target_id: id,
+      summary: `Spec permanently deleted: ${spec.filename}`,
+      detail: { filename: spec.filename, version: spec.current_version, status: spec.status },
+    });
+
+    reply.code(204);
+  });
 }
