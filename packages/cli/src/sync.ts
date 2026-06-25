@@ -13,6 +13,7 @@ export interface SyncOptions {
   dir: string;
   /** check: report drift and exit 1; sync: re-pull when drift is found */
   mode: "check" | "sync";
+  force?: boolean;
 }
 
 function readManifest(dir: string): Manifest {
@@ -39,6 +40,42 @@ function savedSkillSelection(): string {
 
 export async function runSync(opts: SyncOptions): Promise<void> {
   const manifest = readManifest(opts.dir);
+  const verified = await runVerify({ server: opts.server, token: opts.token, dir: opts.dir, quiet: true });
+  if (!verified && opts.mode === "check") {
+    console.error("\nLocal governed spec files do not match the signed registry manifest.");
+    console.error("Run `specreg sync --force` if you intend to discard local edits and restore approved specs.");
+    process.exit(1);
+  }
+  if (!verified && opts.mode === "sync" && !opts.force) {
+    throw new Error("Local governed spec files do not match the signed registry manifest. Re-run `specreg sync --force` to restore approved specs.");
+  }
+  if (!verified && opts.mode === "sync" && opts.force) {
+    console.log("\nLocal governed spec files do not match the signed registry manifest; restoring approved specs...");
+    const compileTargets = savedCompileTargets(opts.dir);
+    await runInit({
+      server: opts.server,
+      token: opts.token,
+      type: manifest.project_type,
+      dir: opts.dir,
+      force: true,
+      styleguides: "none",
+      styleguideDir: ".spec/styleguides",
+      skills: savedSkillSelection(),
+      skillDir: ".spec/skills",
+    });
+    await runVerify({ server: opts.server, token: opts.token, dir: opts.dir, quiet: false });
+    for (const target of compileTargets) {
+      await runCompile({
+        server: opts.server,
+        token: opts.token,
+        type: manifest.project_type,
+        dir: opts.dir,
+        target,
+        force: true,
+      });
+    }
+    return;
+  }
   const identity = repoIdentity();
   const result = await fetchJson<SyncCheckResponse>(`${opts.server}/api/v1/cli/sync-check`, {
     method: "POST",
@@ -83,6 +120,7 @@ export async function runSync(opts: SyncOptions): Promise<void> {
     token: opts.token,
     type: manifest.project_type,
     dir: opts.dir,
+    force: opts.force,
     styleguides: "none",
     styleguideDir: ".spec/styleguides",
     skills: savedSkillSelection(),

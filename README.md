@@ -406,11 +406,21 @@ Check for drift in CI:
 specreg check --server https://specs.example.com
 ```
 
+`check` first verifies the signed local bundle: every governed file in `specs/`
+must match the SHA-256 recorded in `specs/.specregistry.json`, and the manifest
+signature must verify against the registry public key. It then asks the registry
+whether newer approved versions exist. The command exits non-zero for local edits,
+missing governed files, unsigned/invalid manifests, missing specs, or version drift.
+
 Synchronize when the registry has newer approved specs:
 
 ```sh
 specreg sync --server https://specs.example.com
 ```
+
+If local governed specs were edited after download, plain `sync` refuses to discard
+those edits. Use `specreg sync --force --server https://specs.example.com` only when
+you intend to restore the approved registry bundle over local changes.
 
 `specreg init`, `specreg check`, `specreg sync`, and `specreg submit-drafts` report the
 local manifest back to the registry. The Settings page shows these projects so admins can
@@ -583,7 +593,8 @@ jobs:
 
 The action builds the bundled CLI, runs `specreg check` against the checked-out
 repository, posts or updates a PR comment with the drift output, and fails the workflow
-when drift is detected unless `fail-on-drift` is set to `false`.
+when drift or local governed-spec modification is detected unless `fail-on-drift` is set
+to `false`.
 
 Use `specreg audit --ci` when you want LLM-backed implementation conformance checks.
 That requires a server LLM provider configured through Settings or environment variables.
@@ -771,7 +782,8 @@ Use the LDAP tester in Settings before switching users over.
   head, then promote; manifests can carry caret pins (`^1.0.0`) and `sync-check` reports
   drift severity and whether the latest is within the pin.
 - **Signed bundles** — download manifests carry per-file SHA-256 and an ed25519 signature;
-  `specreg verify` checks provenance offline against `/api/v1/meta/public-key`.
+  `specreg check` and `specreg verify` check provenance against `/api/v1/meta/public-key`
+  before trusting local governed spec content.
 - **Two-way git sync** — a subscribed repo editing `specs/*.md` (HMAC-verified GitHub push
   webhook) auto-opens a matching change request, closing the last drift hole.
 - **Chat integrations** — webhooks in JSON, **Slack** (with interactive approve/reject

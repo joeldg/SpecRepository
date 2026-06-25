@@ -73,7 +73,7 @@ Every governed repository should follow this workflow.
    If `SPECREG_AUTH=required`, MCP clients must set `SPECREG_TOKEN` so `get_specs`, `search_specs`, and `report_spec_feedback` can authenticate.
 
 3. **Check Drift**
-   CI should run `specreg check`. Drift is a governance failure, not a style nit. The implementation may be correct against an old spec and wrong against the current one.
+   CI should run `specreg check`. Drift is a governance failure, not a style nit. The implementation may be correct against an old spec and wrong against the current one. `check` also verifies the signed local bundle, so hand-edited governed specs fail before agents or CI treat them as approved context.
    The bundled GitHub Action can run this check in pull requests and post a durable PR comment
    with the exact drift output. When a repository is not yet reporting manifests, admins can
    paste its `.specregistry.json` into the Reports page to diagnose local vs registry versions.
@@ -179,7 +179,7 @@ The implementation follows a previous version, but the registry has moved on.
 
 Evidence:
 
-- `specreg check` reports outdated or missing specs.
+- `specreg check` reports outdated or missing specs and fails when governed local files no longer match the signed manifest.
 - Manifest versions do not match the latest approved versions.
 - Audit findings cite requirements added after the local copy.
 

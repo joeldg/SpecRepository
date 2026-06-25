@@ -121,6 +121,7 @@ try {
       token,
       dir: typeof flags.dir === "string" ? flags.dir : "specs",
       mode: command,
+      force: flags.force === true,
     });
   } else if (command === "compile") {
     const target = typeof flags.target === "string" ? flags.target : "claude";

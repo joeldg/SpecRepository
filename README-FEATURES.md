@@ -81,7 +81,11 @@ authorization for destructive, privileged, or external actions.
 
 ### `specreg check` and `specreg sync`
 
-`check` detects drift between local specs and the registry. `sync` updates local specs and regenerates saved agent context targets.
+`check` verifies the signed local bundle before comparing versions with the registry.
+It fails when a governed spec has been edited locally, a file is missing, the manifest
+signature is invalid, or the registry has newer approved versions. `sync` updates local
+specs and regenerates saved agent context targets. If local governed specs were edited,
+plain `sync` refuses to discard those edits; `sync --force` restores the approved bundle.
 
 Why it matters: drift is a governance failure in SDD. Code can be correct against an old spec and wrong against the current one.
 

@@ -11,7 +11,7 @@ export interface VerifyOptions {
   quiet?: boolean;
 }
 
-interface SignedManifest {
+export interface SignedManifest {
   project_type: string;
   specs: Array<{ filename: string; version: string; sha256?: string }>;
   signature?: string;
@@ -19,20 +19,8 @@ interface SignedManifest {
   [key: string]: unknown;
 }
 
-/**
- * Verify local spec provenance: every file hash must match the manifest, and the
- * manifest signature must verify against the registry's ed25519 public key.
- */
-export async function runVerify(opts: VerifyOptions): Promise<boolean> {
-  const dir = path.resolve(process.cwd(), opts.dir);
-  const manifestFile = path.join(dir, ".specregistry.json");
-  if (!fs.existsSync(manifestFile)) {
-    throw new Error(`No manifest at ${manifestFile}. Run \`specreg init\` first.`);
-  }
-  const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8")) as SignedManifest;
-
+export function verifyLocalSpecFiles(dir: string, manifest: SignedManifest): string[] {
   const problems: string[] = [];
-
   for (const entry of manifest.specs) {
     if (!entry.sha256) {
       problems.push(`${entry.filename}: manifest predates signing (re-run specreg sync)`);
@@ -48,6 +36,22 @@ export async function runVerify(opts: VerifyOptions): Promise<boolean> {
       problems.push(`${entry.filename}: content hash mismatch (locally modified?)`);
     }
   }
+  return problems;
+}
+
+/**
+ * Verify local spec provenance: every file hash must match the manifest, and the
+ * manifest signature must verify against the registry's ed25519 public key.
+ */
+export async function runVerify(opts: VerifyOptions): Promise<boolean> {
+  const dir = path.resolve(process.cwd(), opts.dir);
+  const manifestFile = path.join(dir, ".specregistry.json");
+  if (!fs.existsSync(manifestFile)) {
+    throw new Error(`No manifest at ${manifestFile}. Run \`specreg init\` first.`);
+  }
+  const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8")) as SignedManifest;
+
+  const problems = verifyLocalSpecFiles(dir, manifest);
 
   if (!manifest.signature) {
     problems.push("manifest is unsigned (re-run specreg sync against a current server)");
