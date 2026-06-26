@@ -7,6 +7,7 @@ import { runSync } from "./sync.js";
 import { runCompile, COMPILE_TARGETS, type CompileTarget } from "./compile.js";
 import { runVerify } from "./verify.js";
 import { runAudit } from "./audit.js";
+import { writeCodeInventory } from "./codeMetadata.js";
 
 const HELP = `specreg — SpecRegistry developer CLI
 
@@ -19,6 +20,7 @@ Usage:
   specreg compile   Render the spec set into CLAUDE.md / AGENTS.md / .cursorrules
   specreg verify    Verify local spec hashes + the registry's ed25519 bundle signature
   specreg audit     Ask the configured server LLM whether this codebase violates its governed specs
+  specreg code-map  Generate a sidecar AST/code metadata inventory with stable code IDs
 
 Options:
   --server <url>    Registry server (default: $SPECREG_SERVER or http://localhost:4000)
@@ -30,6 +32,7 @@ Options:
   --skills <s>      init: base | all | none | comma skill slugs (default: interactive/base)
   --skill-dir <p>   init: local governed skill directory (default: .spec/skills)
   --out <path>      generate: prompt output directory (default: .spec/prompts)
+                    code-map: metadata output file (default: .spec/code-map.json)
   --examples        generate: write companion example templates
   --example-dir <p> generate: example template directory (default: .spec/examples)
   --target <t>      compile: claude | agents | cursor (default: claude)
@@ -119,6 +122,15 @@ try {
       publish: flags.publish === true,
       force: flags.force === true,
     });
+  } else if (command === "code-map") {
+    const out = typeof flags.out === "string" ? flags.out : ".spec/code-map.json";
+    const inventory = writeCodeInventory({
+      root: process.cwd(),
+      out,
+      force: flags.force === true,
+    });
+    console.log(`Wrote ${inventory.entity_count} code metadata entit${inventory.entity_count === 1 ? "y" : "ies"} to ${out}.`);
+    console.log(`Languages: ${inventory.languages.join(", ") || "(none)"}`);
   } else if (command === "check" || command === "sync") {
     await runSync({
       server,

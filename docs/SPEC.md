@@ -63,6 +63,7 @@ A command-line interface deployed to developer environments to synchronize local
     2. Sends structural metadata to the server.
     3. Fetches specialized stubbed LLM prompts from the server to parse the local codebase and automatically generate the matching `DESIGN.md` or `STRUCTURE.md` files.
     4. Optionally writes companion example templates for each generated draft so positive examples, anti-examples, edge cases, and audit/test notes can be reviewed alongside the spec without being submitted by default.
+    5. Can generate `.spec/code-map.json` with stable IDs for parsed code entities as the local sidecar foundation for traceability, drift, and coverage reporting.
 
 ### 2.3. AI Agent Integration & Feedback Loop
 

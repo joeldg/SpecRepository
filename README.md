@@ -20,7 +20,7 @@ for Spec Driven Development, observability, and token economics lives in
 | --- | --- |
 | `packages/server` | Fastify API + SQLite storage, review workflow, signed bundles, AI feedback/draft-fix/audit/efficacy, FTS5 search, webhooks, analytics, auth + LDAP, git push-back, inbound git sync, Slack/GChat |
 | `packages/web` | React management dashboard (specs, diffs, reviews, feedback, templates, settings, search, analytics, login, efficacy) |
-| `packages/cli` | `specreg` developer CLI (`init`, `generate`, `check`, `sync`, `compile`, `verify`, `audit`) |
+| `packages/cli` | `specreg` developer CLI (`init`, `generate`, `code-map`, `check`, `sync`, `compile`, `verify`, `audit`) |
 | `packages/mcp` | `specreg-mcp` — MCP stdio server so AI agents read specs / search / file feedback natively |
 | `packages/shared` | Shared TypeScript domain types + semver/range helpers |
 | `samples/ai-sdd` | Loadable sample spec pack + API loader (`npm run sample:ai-sdd`) |
@@ -450,6 +450,19 @@ Verify downloaded bundles offline against the registry public key:
 ```sh
 specreg verify --server https://specs.example.com
 ```
+
+Generate code metadata sidecars for AST/code-to-spec work:
+
+```sh
+specreg code-map
+specreg code-map --out .spec/code-map.json --force
+```
+
+`code-map` writes `.spec/code-map.json` with stable code IDs, entity kinds, paths,
+signatures, source locations, hashes, parent links, and route metadata. The initial
+extractor uses the TypeScript compiler for TypeScript/JavaScript AST entities and
+lightweight Python/SQL extraction for functions, classes, routes, tables, and indexes.
+It does not rewrite source files.
 
 Run an AI conformance audit:
 

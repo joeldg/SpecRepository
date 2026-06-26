@@ -102,6 +102,15 @@ The CLI can scan a repository, produce draft spec prompts or LLM-generated draft
 
 Why it matters: new or existing repos can bootstrap governed specs without bypassing review.
 
+### `specreg code-map`
+
+The CLI can generate `.spec/code-map.json`, a reviewable sidecar inventory of code entities
+with stable IDs. The first slice extracts TypeScript/JavaScript AST entities through the
+TypeScript compiler, plus Python functions/classes/routes and SQL tables/indexes.
+
+Why it matters: this is the metadata foundation for code-to-spec traceability, semantic
+drift scoring, and implementation coverage reports without rewriting source files.
+
 ### Compiled Agent Context
 
 The registry can compile governed spec sets into agent-readable files:

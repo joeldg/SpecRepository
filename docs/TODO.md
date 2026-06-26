@@ -63,18 +63,22 @@ Completed adjacent foundations:
 - [x] Repo metadata/spec gap detector that uses tree/manifests/evidence to suggest missing
   governance specs.
 - [x] Prometheus metrics endpoint for registry, review, usage, and SDD health signals.
+- [x] Initial `specreg code-map` sidecar metadata generator for TypeScript/JavaScript AST
+  entities plus Python and SQL extraction. Writes `.spec/code-map.json` with stable code
+  IDs, entity kinds, paths, signatures, source locations, parent links, hashes, and route
+  metadata without rewriting source files.
 
 Remaining AST/code metadata work:
 
-- [ ] AST tagging engine: parse supported languages and extract stable code entities such as
-  files, modules, classes, functions, routes, schemas, migrations, config keys, commands,
-  jobs, and dependency edges.
-- [ ] Stable code ID generation: assign deterministic IDs to extracted entities so reports
-  can survive file movement, renames, and incremental edits. IDs should record language,
-  entity kind, path, symbol/signature, hash, and parent relationships.
-- [ ] Metadata injection workflow: optionally write traceability metadata back into generated
-  sidecar files or source-adjacent manifests without unsafe source rewrites by default.
-  Include a reviewable mode for projects that want inline comments/annotations.
+- [ ] Expand AST tagging coverage: add deeper module/import graphs, config keys, commands,
+  background jobs, migrations, dependency edges, API shapes, schema fields, and more
+  language-specific parsers beyond the initial TypeScript/JavaScript, Python, and SQL slice.
+- [ ] Harden stable code ID generation for rename/move detection and incremental updates,
+  including alias history, similarity matching, deleted entity retention, and merge behavior
+  when a code entity is split or combined.
+- [ ] Metadata injection workflow beyond sidecars: optionally write traceability metadata into
+  source-adjacent manifests or reviewable inline comments/annotations for projects that
+  explicitly allow source modification.
 - [ ] Code-to-spec traceability graph: link code IDs to governing spec IDs, versions,
   sections, requirements, audit prompts, and examples. Support manual overrides and agent
   feedback when automatic matching is wrong or incomplete.
