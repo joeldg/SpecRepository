@@ -330,19 +330,31 @@ export default function GenerationWorkbenchPage() {
         <h2>Task Automation</h2>
         <div className="card">
           <div className="form-row">
-            <input type="text" value={task} onChange={(e) => setTask(e.target.value)} style={{ flex: 1, minWidth: 320 }} />
-            <input
-              type="number"
-              value={tokenBudget}
-              onChange={(e) => setTokenBudget(Math.max(100, Number(e.target.value) || 1200))}
-              style={{ width: 120 }}
-            />
+            <label style={{ flex: "1 1 320px", minWidth: 280 }}>
+              <span className="label">Task or maintenance goal</span>
+              <input type="text" value={task} onChange={(e) => setTask(e.target.value)} style={{ width: "100%" }} />
+            </label>
+            <label style={{ width: 180 }}>
+              <span className="label">Context token budget</span>
+              <input
+                type="number"
+                value={tokenBudget}
+                min={100}
+                step={100}
+                aria-describedby="task-token-budget-help"
+                onChange={(e) => setTokenBudget(Math.max(100, Number(e.target.value) || 1200))}
+                style={{ width: "100%" }}
+              />
+            </label>
             <button onClick={runPlanner} disabled={!features?.task_planner || !projectType || busy === "planner" || (useLlm && !features?.llm_generation)}>
               {busy === "planner" ? "Planning..." : "Plan task"}
             </button>
             <button onClick={runMaintenance} disabled={!features?.maintenance || !projectType || busy === "maintenance" || (useLlm && !features?.llm_generation)}>
               {busy === "maintenance" ? "Loading..." : "Maintenance"}
             </button>
+          </div>
+          <div id="task-token-budget-help" className="faint" style={{ margin: "-4px 0 12px" }}>
+            Token budget limits how much spec context the planner and maintenance suggestions can select.
           </div>
           {plan && (
             <div className="report-grid">

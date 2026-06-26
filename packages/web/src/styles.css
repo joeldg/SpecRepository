@@ -303,7 +303,7 @@ button.danger { color: var(--red); }
 button.success { color: var(--green); }
 button:disabled { opacity: 0.5; cursor: default; }
 
-input[type="text"], select, textarea {
+input[type="text"], input[type="number"], select, textarea {
   background: var(--bg);
   color: var(--text);
   border: 1px solid var(--border-strong);
