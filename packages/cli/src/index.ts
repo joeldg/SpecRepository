@@ -33,6 +33,7 @@ Options:
   --skill-dir <p>   init: local governed skill directory (default: .spec/skills)
   --out <path>      generate: prompt output directory (default: .spec/prompts)
                     code-map: metadata output file (default: .spec/code-map.json)
+  --trace-out <p>   code-map: traceability report file (default: .spec/code-trace.json)
   --examples        generate: write companion example templates
   --example-dir <p> generate: example template directory (default: .spec/examples)
   --target <t>      compile: claude | agents | cursor (default: claude)
@@ -127,9 +128,13 @@ try {
     const inventory = writeCodeInventory({
       root: process.cwd(),
       out,
+      specsDir: typeof flags.dir === "string" ? flags.dir : "specs",
+      traceOut: typeof flags["trace-out"] === "string" ? flags["trace-out"] : ".spec/code-trace.json",
       force: flags.force === true,
     });
     console.log(`Wrote ${inventory.entity_count} code metadata entit${inventory.entity_count === 1 ? "y" : "ies"} to ${out}.`);
+    console.log(`Wrote traceability report to ${typeof flags["trace-out"] === "string" ? flags["trace-out"] : ".spec/code-trace.json"}.`);
+    console.log(`Code-to-spec coverage: ${Math.round(inventory.trace.coverage.coverage_ratio * 100)}% (${inventory.trace.coverage.linked_entity_count}/${inventory.trace.coverage.governed_entity_count}); drift ${inventory.trace.drift.severity} (${inventory.trace.drift.score}).`);
     console.log(`Languages: ${inventory.languages.join(", ") || "(none)"}`);
   } else if (command === "check" || command === "sync") {
     await runSync({

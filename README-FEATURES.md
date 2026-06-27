@@ -105,8 +105,15 @@ Why it matters: new or existing repos can bootstrap governed specs without bypas
 ### `specreg code-map`
 
 The CLI can generate `.spec/code-map.json`, a reviewable sidecar inventory of code entities
-with stable IDs. The first slice extracts TypeScript/JavaScript AST entities through the
-TypeScript compiler, plus Python functions/classes/routes and SQL tables/indexes.
+with stable IDs, plus `.spec/code-trace.json` for code-to-spec traceability. The extractor
+uses the TypeScript compiler for TypeScript/JavaScript AST entities, plus lightweight
+Python, SQL, and config extraction for imports, functions, classes, routes, commands,
+config, migrations, tables, fields, and indexes.
+
+The trace report links code entities to local Markdown specs, reports unmapped
+implementation surfaces, calculates coverage and drift summaries, records stable-ID aliases
+when a previous inventory exists, and carries a code embedding profile for future semantic
+matching.
 
 Why it matters: this is the metadata foundation for code-to-spec traceability, semantic
 drift scoring, and implementation coverage reports without rewriting source files.

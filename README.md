@@ -456,13 +456,18 @@ Generate code metadata sidecars for AST/code-to-spec work:
 ```sh
 specreg code-map
 specreg code-map --out .spec/code-map.json --force
+specreg code-map --dir specs --trace-out .spec/code-trace.json
 ```
 
 `code-map` writes `.spec/code-map.json` with stable code IDs, entity kinds, paths,
-signatures, source locations, hashes, parent links, and route metadata. The initial
-extractor uses the TypeScript compiler for TypeScript/JavaScript AST entities and
-lightweight Python/SQL extraction for functions, classes, routes, tables, and indexes.
-It does not rewrite source files.
+signatures, source locations, hashes, parent links, route metadata, coverage, and drift
+summaries. It also writes `.spec/code-trace.json`, which links code entities to local
+Markdown specs, reports unmapped implementation surfaces, records stable-ID aliases when
+prior inventory data is available, and includes a code embedding profile for future
+semantic matching. The extractor uses the TypeScript compiler for TypeScript/JavaScript
+AST entities and lightweight Python/SQL/config extraction for imports, functions, classes,
+routes, commands, config, migrations, tables, fields, and indexes. It does not rewrite
+source files.
 
 Run an AI conformance audit:
 

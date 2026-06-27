@@ -19,17 +19,25 @@ const IGNORED_DIRS = new Set([
 
 const CODE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py", ".sql"]);
 const ROUTE_METHODS = new Set(["get", "post", "put", "patch", "delete", "options", "head", "all"]);
+const CONFIG_FILENAMES = new Set(["package.json", "tsconfig.json", "vite.config.ts", "vite.config.js"]);
 
 export type CodeEntityKind =
   | "file"
+  | "import"
   | "class"
   | "interface"
   | "type"
   | "function"
   | "method"
   | "route"
+  | "command"
+  | "config"
+  | "migration"
   | "schema"
+  | "field"
   | "index";
+
+type MetadataValue = string | number | boolean | string[];
 
 export interface CodeEntity {
   id: string;
@@ -43,7 +51,7 @@ export interface CodeEntity {
   end_line: number;
   hash: string;
   parent_id?: string;
-  metadata?: Record<string, string | number | boolean>;
+  metadata?: Record<string, MetadataValue>;
 }
 
 export interface CodeInventory {
@@ -53,12 +61,73 @@ export interface CodeInventory {
   entity_count: number;
   languages: string[];
   entities: CodeEntity[];
+  coverage?: CodeCoverageSummary;
+  drift?: CodeDriftSummary;
 }
 
 export interface CodeMapOptions {
   root: string;
   out: string;
   force: boolean;
+  specsDir?: string;
+  traceOut?: string;
+}
+
+export interface SpecReference {
+  filename: string;
+  title: string;
+  version?: string;
+  sections: string[];
+  content: string;
+}
+
+export interface TraceabilityLink {
+  entity_id: string;
+  entity_name: string;
+  entity_kind: CodeEntityKind;
+  spec_filename: string;
+  confidence: number;
+  reasons: string[];
+}
+
+export interface CodeCoverageSummary {
+  governed_entity_count: number;
+  linked_entity_count: number;
+  unlinked_entity_count: number;
+  coverage_ratio: number;
+  linked_by_kind: Record<string, number>;
+  unlinked_by_kind: Record<string, number>;
+}
+
+export interface CodeDriftSummary {
+  score: number;
+  severity: "none" | "low" | "medium" | "high";
+  signals: string[];
+}
+
+export interface CodeAlias {
+  previous_id: string;
+  current_id: string;
+  reason: "same_hash" | "same_path_name";
+}
+
+export interface CodeTraceReport {
+  schema_version: 1;
+  generated_at: string;
+  root: string;
+  specs_dir: string;
+  spec_count: number;
+  entity_count: number;
+  links: TraceabilityLink[];
+  unlinked_entities: Array<Pick<CodeEntity, "id" | "kind" | "path" | "name" | "signature">>;
+  aliases: CodeAlias[];
+  coverage: CodeCoverageSummary;
+  drift: CodeDriftSummary;
+  embedding_profile: {
+    default_scope: string[];
+    recommended_fields: string[];
+    notes: string;
+  };
 }
 
 interface AddEntityInput {
@@ -72,7 +141,7 @@ interface AddEntityInput {
   endLine: number;
   body: string;
   parentId?: string;
-  metadata?: Record<string, string | number | boolean>;
+  metadata?: Record<string, MetadataValue>;
 }
 
 function digest(value: string, length = 16): string {
@@ -89,6 +158,7 @@ function languageFor(file: string): string {
   if (ext === ".js" || ext === ".jsx" || ext === ".mjs" || ext === ".cjs") return "JavaScript";
   if (ext === ".py") return "Python";
   if (ext === ".sql") return "SQL";
+  if (ext === ".json") return "JSON";
   return "Unknown";
 }
 
@@ -167,7 +237,7 @@ function collectFiles(root: string): string[] {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         walk(full);
-      } else if (CODE_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
+      } else if (CODE_EXTENSIONS.has(path.extname(entry.name).toLowerCase()) || CONFIG_FILENAMES.has(entry.name)) {
         files.push(full);
       }
     }
@@ -200,7 +270,7 @@ function extractTypeScript(root: string, file: string, content: string, entities
   const source = ts.createSourceFile(file, content, ts.ScriptTarget.Latest, true, sourceKind);
   const classStack: string[] = [];
 
-  function addNode(kind: CodeEntityKind, name: string, node: ts.Node, parentId?: string, metadata?: Record<string, string | number | boolean>): CodeEntity {
+  function addNode(kind: CodeEntityKind, name: string, node: ts.Node, parentId?: string, metadata?: Record<string, MetadataValue>): CodeEntity {
     const loc = nodeLineColumn(source, node);
     return addEntity(entities, {
       kind,
@@ -218,7 +288,38 @@ function extractTypeScript(root: string, file: string, content: string, entities
   }
 
   function visit(node: ts.Node): void {
-    if (ts.isClassDeclaration(node) && node.name) {
+    if (ts.isImportDeclaration(node)) {
+      const moduleSpecifier = ts.isStringLiteral(node.moduleSpecifier) ? node.moduleSpecifier.text : node.moduleSpecifier.getText(source);
+      const loc = nodeLineColumn(source, node);
+      addEntity(entities, {
+        kind: "import",
+        language,
+        relativePath,
+        name: moduleSpecifier,
+        signature: signatureFromNode(source, node),
+        startLine: loc.line,
+        startColumn: loc.column,
+        endLine: nodeEndLine(source, node),
+        body: node.getText(source),
+        parentId: fileEntity.id,
+        metadata: { module: moduleSpecifier },
+      });
+    } else if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+      const loc = nodeLineColumn(source, node);
+      addEntity(entities, {
+        kind: "import",
+        language,
+        relativePath,
+        name: node.moduleSpecifier.text,
+        signature: signatureFromNode(source, node),
+        startLine: loc.line,
+        startColumn: loc.column,
+        endLine: nodeEndLine(source, node),
+        body: node.getText(source),
+        parentId: fileEntity.id,
+        metadata: { module: node.moduleSpecifier.text, export: true },
+      });
+    } else if (ts.isClassDeclaration(node) && node.name) {
       const entity = addNode("class", node.name.text, node);
       classStack.push(entity.id);
       ts.forEachChild(node, visit);
@@ -288,6 +389,25 @@ function extractPython(root: string, file: string, content: string, entities: Co
     const indent = line.match(/^\s*/)?.[0].length ?? 0;
     while (classStack.length > 0 && indent <= classStack[classStack.length - 1].indent && line.trim()) classStack.pop();
 
+    const importMatch = line.match(/^\s*(?:from\s+([A-Za-z_][\w.]*)\s+import\s+(.+)|import\s+(.+))/);
+    if (importMatch) {
+      const moduleName = importMatch[1] ?? (importMatch[3] ?? "").split(",")[0].trim();
+      addEntity(entities, {
+        kind: "import",
+        language: "Python",
+        relativePath,
+        name: moduleName,
+        signature: cleanSignature(line),
+        startLine: lineNumber,
+        startColumn: indent + 1,
+        endLine: lineNumber,
+        body: line,
+        parentId: fileEntity.id,
+        metadata: { module: moduleName },
+      });
+      return;
+    }
+
     const routeMatch = line.match(/^\s*@[\w.]+\.(get|post|put|patch|delete|options|head|route)\(["']([^"']+)["']/i);
     if (routeMatch) {
       pendingRoute = { method: routeMatch[1].toUpperCase() === "ROUTE" ? "ANY" : routeMatch[1].toUpperCase(), routePath: routeMatch[2], line: lineNumber };
@@ -350,9 +470,24 @@ function extractPython(root: string, file: string, content: string, entities: Co
 
 function extractSql(root: string, file: string, content: string, entities: CodeEntity[], fileEntity: CodeEntity): void {
   const relativePath = normalizePath(path.relative(root, file));
+  if (/\/?migrations?\//i.test(relativePath) || /^\d+[_-].+\.sql$/i.test(path.basename(relativePath))) {
+    addEntity(entities, {
+      kind: "migration",
+      language: "SQL",
+      relativePath,
+      name: path.basename(relativePath),
+      signature: relativePath,
+      startLine: 1,
+      startColumn: 1,
+      endLine: content.split(/\r?\n/).length,
+      body: content,
+      parentId: fileEntity.id,
+      metadata: { migration_file: true },
+    });
+  }
   for (const match of content.matchAll(/\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`[]?([A-Za-z_][\w.]*)/gi)) {
     const loc = lineColumnFromOffset(content, match.index ?? 0);
-    addEntity(entities, {
+    const table = addEntity(entities, {
       kind: "schema",
       language: "SQL",
       relativePath,
@@ -365,6 +500,36 @@ function extractSql(root: string, file: string, content: string, entities: CodeE
       parentId: fileEntity.id,
       metadata: { object_type: "table" },
     });
+    const tableStart = match.index ?? 0;
+    const after = content.slice(tableStart);
+    const statement = after.slice(0, Math.max(after.indexOf(";"), after.indexOf("\n\n"), 0) || after.length);
+    const open = statement.indexOf("(");
+    const close = statement.lastIndexOf(")");
+    if (open >= 0 && close > open) {
+      const fields = statement
+        .slice(open + 1, close)
+        .split(",")
+        .map((field) => field.trim())
+        .filter((field) => /^[A-Za-z_"][\w"]*\s+/.test(field) && !/^(constraint|primary|foreign|unique|check)\b/i.test(field));
+      for (const field of fields) {
+        const name = field.match(/^["`[]?([A-Za-z_][\w]*)/)?.[1];
+        if (!name) continue;
+        const fieldLoc = lineColumnFromOffset(content, tableStart + Math.max(0, statement.indexOf(field)));
+        addEntity(entities, {
+          kind: "field",
+          language: "SQL",
+          relativePath,
+          name: `${match[1]}.${name}`,
+          signature: cleanSignature(field),
+          startLine: fieldLoc.line,
+          startColumn: fieldLoc.column,
+          endLine: fieldLoc.line,
+          body: field,
+          parentId: table.id,
+          metadata: { table: match[1], field: name },
+        });
+      }
+    }
   }
   for (const match of content.matchAll(/\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?["`[]?([A-Za-z_][\w.]*)/gi)) {
     const loc = lineColumnFromOffset(content, match.index ?? 0);
@@ -383,7 +548,192 @@ function extractSql(root: string, file: string, content: string, entities: CodeE
   }
 }
 
-export function buildCodeInventory(root: string): CodeInventory {
+function extractConfig(root: string, file: string, content: string, entities: CodeEntity[], fileEntity: CodeEntity): void {
+  const relativePath = normalizePath(path.relative(root, file));
+  const filename = path.basename(file);
+  if (filename === "package.json") {
+    try {
+      const pkg = JSON.parse(content) as {
+        scripts?: Record<string, string>;
+        dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
+      };
+      for (const [name, command] of Object.entries(pkg.scripts ?? {})) {
+        addEntity(entities, {
+          kind: "command",
+          language: "JSON",
+          relativePath,
+          name,
+          signature: `${name}: ${command}`,
+          startLine: 1,
+          startColumn: 1,
+          endLine: 1,
+          body: command,
+          parentId: fileEntity.id,
+          metadata: { source: "package.json", command },
+        });
+      }
+      const deps = [...Object.keys(pkg.dependencies ?? {}), ...Object.keys(pkg.devDependencies ?? {})].sort();
+      addEntity(entities, {
+        kind: "config",
+        language: "JSON",
+        relativePath,
+        name: "package dependencies",
+        signature: `${deps.length} npm dependencies`,
+        startLine: 1,
+        startColumn: 1,
+        endLine: content.split(/\r?\n/).length,
+        body: deps.join("\n"),
+        parentId: fileEntity.id,
+        metadata: { source: "package.json", dependency_count: deps.length, dependencies: deps.slice(0, 50) },
+      });
+    } catch {
+      return;
+    }
+  } else {
+    addEntity(entities, {
+      kind: "config",
+      language: languageFor(file),
+      relativePath,
+      name: filename,
+      signature: relativePath,
+      startLine: 1,
+      startColumn: 1,
+      endLine: content.split(/\r?\n/).length,
+      body: content,
+      parentId: fileEntity.id,
+      metadata: { source: filename },
+    });
+  }
+}
+
+function loadSpecs(root: string, specsDir: string): SpecReference[] {
+  const dir = path.resolve(root, specsDir);
+  if (!fs.existsSync(dir)) return [];
+  const specs: SpecReference[] = [];
+  function walk(current: string): void {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) walk(full);
+      if (!entry.isFile() || path.extname(entry.name).toLowerCase() !== ".md") continue;
+      const content = fs.readFileSync(full, "utf8");
+      const relative = normalizePath(path.relative(dir, full));
+      const title = content.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? path.basename(relative, ".md");
+      const version = content.match(/\bversion:\s*([^\s]+)/i)?.[1] ?? content.match(/\bcurrent_version:\s*([^\s]+)/i)?.[1];
+      const sections = [...content.matchAll(/^##+\s+(.+)$/gm)].map((match) => match[1].trim());
+      specs.push({ filename: relative, title, version, sections, content });
+    }
+  }
+  walk(dir);
+  return specs;
+}
+
+function tokensFor(value: string): string[] {
+  return [...new Set(value.toLowerCase().split(/[^a-z0-9:/._-]+/).filter((token) => token.length >= 3))];
+}
+
+function governable(entity: CodeEntity): boolean {
+  return !["file", "import", "field"].includes(entity.kind);
+}
+
+function linkEntitiesToSpecs(entities: CodeEntity[], specs: SpecReference[]): TraceabilityLink[] {
+  const links: TraceabilityLink[] = [];
+  for (const entity of entities.filter(governable)) {
+    const haystacks = specs.map((spec) => ({ spec, text: `${spec.filename}\n${spec.title}\n${spec.sections.join("\n")}\n${spec.content}`.toLowerCase() }));
+    const probes = [
+      entity.name,
+      entity.signature,
+      entity.path,
+      String(entity.metadata?.route_path ?? ""),
+      String(entity.metadata?.table ?? ""),
+      String(entity.metadata?.source ?? ""),
+    ].flatMap(tokensFor);
+    for (const { spec, text } of haystacks) {
+      const matched = probes.filter((probe) => text.includes(probe));
+      const directName = entity.name.length >= 3 && text.includes(entity.name.toLowerCase());
+      const directRoute = typeof entity.metadata?.route_path === "string" && text.includes(entity.metadata.route_path.toLowerCase());
+      if (!directName && !directRoute && matched.length < 2) continue;
+      const confidence = Math.min(0.95, 0.35 + matched.length * 0.12 + (directName ? 0.2 : 0) + (directRoute ? 0.25 : 0));
+      links.push({
+        entity_id: entity.id,
+        entity_name: entity.name,
+        entity_kind: entity.kind,
+        spec_filename: spec.filename,
+        confidence: Number(confidence.toFixed(2)),
+        reasons: [
+          ...(directName ? ["entity name appears in spec"] : []),
+          ...(directRoute ? ["route path appears in spec"] : []),
+          ...(matched.length ? [`matched tokens: ${matched.slice(0, 6).join(", ")}`] : []),
+        ],
+      });
+    }
+  }
+  return links.sort((a, b) => a.entity_id.localeCompare(b.entity_id) || b.confidence - a.confidence);
+}
+
+function summarizeCoverage(entities: CodeEntity[], links: TraceabilityLink[]): CodeCoverageSummary {
+  const governed = entities.filter(governable);
+  const linkedIds = new Set(links.map((link) => link.entity_id));
+  const byKind = (items: CodeEntity[]) =>
+    items.reduce<Record<string, number>>((acc, entity) => {
+      acc[entity.kind] = (acc[entity.kind] ?? 0) + 1;
+      return acc;
+    }, {});
+  const linked = governed.filter((entity) => linkedIds.has(entity.id));
+  const unlinked = governed.filter((entity) => !linkedIds.has(entity.id));
+  return {
+    governed_entity_count: governed.length,
+    linked_entity_count: linked.length,
+    unlinked_entity_count: unlinked.length,
+    coverage_ratio: governed.length ? Number((linked.length / governed.length).toFixed(4)) : 1,
+    linked_by_kind: byKind(linked),
+    unlinked_by_kind: byKind(unlinked),
+  };
+}
+
+function summarizeDrift(coverage: CodeCoverageSummary, specs: SpecReference[]): CodeDriftSummary {
+  const score = Number((coverage.governed_entity_count ? coverage.unlinked_entity_count / coverage.governed_entity_count : 0).toFixed(4));
+  const severity = score === 0 ? "none" : score < 0.25 ? "low" : score < 0.5 ? "medium" : "high";
+  const signals = [
+    `${coverage.unlinked_entity_count} of ${coverage.governed_entity_count} governable code entities have no local spec link`,
+    `${specs.length} local spec document${specs.length === 1 ? "" : "s"} scanned`,
+  ];
+  if (coverage.unlinked_by_kind.route) signals.push(`${coverage.unlinked_by_kind.route} route entity/entities are unmapped`);
+  if (coverage.unlinked_by_kind.schema) signals.push(`${coverage.unlinked_by_kind.schema} schema entity/entities are unmapped`);
+  return { score, severity, signals };
+}
+
+function loadPreviousInventory(root: string, out: string): CodeInventory | undefined {
+  const target = path.resolve(root, out);
+  if (!fs.existsSync(target)) return undefined;
+  try {
+    return JSON.parse(fs.readFileSync(target, "utf8")) as CodeInventory;
+  } catch {
+    return undefined;
+  }
+}
+
+function aliasChanges(previous: CodeInventory | undefined, current: CodeInventory): CodeAlias[] {
+  if (!previous) return [];
+  const aliases: CodeAlias[] = [];
+  const currentByHash = new Map(current.entities.map((entity) => [entity.hash, entity]));
+  const currentByPathName = new Map(current.entities.map((entity) => [`${entity.kind}|${entity.path}|${entity.name}`, entity]));
+  for (const oldEntity of previous.entities) {
+    if (current.entities.some((entity) => entity.id === oldEntity.id)) continue;
+    const sameHash = currentByHash.get(oldEntity.hash);
+    if (sameHash && sameHash.id !== oldEntity.id) {
+      aliases.push({ previous_id: oldEntity.id, current_id: sameHash.id, reason: "same_hash" });
+      continue;
+    }
+    const samePathName = currentByPathName.get(`${oldEntity.kind}|${oldEntity.path}|${oldEntity.name}`);
+    if (samePathName && samePathName.id !== oldEntity.id) {
+      aliases.push({ previous_id: oldEntity.id, current_id: samePathName.id, reason: "same_path_name" });
+    }
+  }
+  return aliases;
+}
+
+export function buildCodeInventory(root: string, specsDir = "specs", previous?: CodeInventory): CodeInventory & { trace: CodeTraceReport } {
   const resolvedRoot = path.resolve(root);
   const entities: CodeEntity[] = [];
   const files = collectFiles(resolvedRoot);
@@ -397,26 +747,67 @@ export function buildCodeInventory(root: string): CodeInventory {
       extractPython(resolvedRoot, file, content, entities, fileEntity);
     } else if (ext === ".sql") {
       extractSql(resolvedRoot, file, content, entities, fileEntity);
+    } else if (CONFIG_FILENAMES.has(path.basename(file))) {
+      extractConfig(resolvedRoot, file, content, entities, fileEntity);
     }
   }
   const languages = [...new Set(entities.map((entity) => entity.language))].sort();
-  return {
+  const specs = loadSpecs(resolvedRoot, specsDir);
+  const links = linkEntitiesToSpecs(entities, specs);
+  const coverage = summarizeCoverage(entities, links);
+  const drift = summarizeDrift(coverage, specs);
+  const inventory: CodeInventory = {
     schema_version: 1,
     generated_at: new Date().toISOString(),
     root: path.basename(resolvedRoot),
     entity_count: entities.length,
     languages,
     entities,
+    coverage,
+    drift,
   };
+  const linked = new Set(links.map((link) => link.entity_id));
+  const trace: CodeTraceReport = {
+    schema_version: 1,
+    generated_at: inventory.generated_at,
+    root: inventory.root,
+    specs_dir: specsDir,
+    spec_count: specs.length,
+    entity_count: inventory.entity_count,
+    links,
+    unlinked_entities: entities.filter((entity) => governable(entity) && !linked.has(entity.id)).map((entity) => ({
+      id: entity.id,
+      kind: entity.kind,
+      path: entity.path,
+      name: entity.name,
+      signature: entity.signature,
+    })),
+    aliases: aliasChanges(previous, inventory),
+    coverage,
+    drift,
+    embedding_profile: {
+      default_scope: ["route", "schema", "command", "config", "class", "function", "method"],
+      recommended_fields: ["kind", "path", "name", "signature", "metadata", "linked spec filename", "linked spec sections"],
+      notes: "Embed concise structural summaries for code entities separately from full spec-text embeddings.",
+    },
+  };
+  return { ...inventory, trace };
 }
 
-export function writeCodeInventory(opts: CodeMapOptions): CodeInventory {
-  const inventory = buildCodeInventory(opts.root);
+export function writeCodeInventory(opts: CodeMapOptions): CodeInventory & { trace: CodeTraceReport } {
+  const inventory = buildCodeInventory(opts.root, opts.specsDir ?? "specs", loadPreviousInventory(opts.root, opts.out));
   const target = path.resolve(opts.root, opts.out);
   if (fs.existsSync(target) && !opts.force) {
     throw new Error(`${path.relative(opts.root, target)} already exists. Re-run with --force to overwrite it.`);
   }
+  const traceTarget = path.resolve(opts.root, opts.traceOut ?? ".spec/code-trace.json");
+  if (fs.existsSync(traceTarget) && !opts.force) {
+    throw new Error(`${path.relative(opts.root, traceTarget)} already exists. Re-run with --force to overwrite it.`);
+  }
   fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.writeFileSync(target, JSON.stringify(inventory, null, 2) + "\n", "utf8");
+  const { trace, ...sidecar } = inventory;
+  fs.writeFileSync(target, JSON.stringify(sidecar, null, 2) + "\n", "utf8");
+  fs.mkdirSync(path.dirname(traceTarget), { recursive: true });
+  fs.writeFileSync(traceTarget, JSON.stringify(trace, null, 2) + "\n", "utf8");
   return inventory;
 }

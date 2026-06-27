@@ -69,30 +69,25 @@ Completed adjacent foundations:
   metadata without rewriting source files.
 - [x] Settings-backed feature controls for automation and AST/code metadata families, with
   Docker/server-friendly environment defaults and database overrides from the Settings UI.
+- [x] Expanded code metadata tagging for imports, package commands, config surfaces,
+  migrations, SQL fields, and schema objects.
+- [x] Stable-ID alias reporting when a prior code-map exists and entities move, rename, or
+  otherwise retain a hash/path-name relationship.
+- [x] Source-adjacent metadata workflow via `.spec/code-map.json` and `.spec/code-trace.json`
+  sidecars, preserving source files unless a future inline-injection mode is explicitly
+  enabled.
+- [x] Initial code-to-spec traceability graph linking parsed entities to local Markdown specs,
+  including confidence and match reasons.
+- [x] Initial semantic drift and coverage pipeline in the trace report, including a 0.0-1.0
+  drift score, severity, unmapped entity list, and linked/unlinked coverage counts by kind.
+- [x] Code/AST embedding profile guidance in `.spec/code-trace.json` for separating code
+  entity summaries from spec-text embeddings.
 
 Remaining AST/code metadata work:
 
-- [ ] Expand AST tagging coverage: add deeper module/import graphs, config keys, commands,
-  background jobs, migrations, dependency edges, API shapes, schema fields, and more
-  language-specific parsers beyond the initial TypeScript/JavaScript, Python, and SQL slice.
-- [ ] Harden stable code ID generation for rename/move detection and incremental updates,
-  including alias history, similarity matching, deleted entity retention, and merge behavior
-  when a code entity is split or combined.
-- [ ] Metadata injection workflow beyond sidecars: optionally write traceability metadata into
-  source-adjacent manifests or reviewable inline comments/annotations for projects that
-  explicitly allow source modification.
-- [ ] Code-to-spec traceability graph: link code IDs to governing spec IDs, versions,
-  sections, requirements, audit prompts, and examples. Support manual overrides and agent
-  feedback when automatic matching is wrong or incomplete.
-- [ ] Semantic drift pipeline: summarize changed code entities in CI, embed structural intent,
-  compare against active spec vectors/code-profile vectors, and publish a telemetry drift
-  score (0.0 to 1.0) to reports and `/metrics`.
-- [ ] Code/AST embedding profile: add a separate embedding configuration for parsed code
-  symbols, module summaries, dependency edges, API shapes, schemas, and architectural intent
-  so AST drift and code-to-spec matching can use different models from spec text search.
-- [ ] Code-to-spec coverage reports: show which files, modules, routes, APIs, schemas, jobs,
-  commands, and config areas are governed by which specs, and highlight code with no matching
-  spec coverage or specs with no implementation evidence.
+- [ ] Deepen the traceability system with server ingestion, UI reports, CI annotations,
+  manual override review, deleted-entity retention, split/merge history, richer dependency
+  graphs, and additional language parsers.
 
 ## Enterprise
 
