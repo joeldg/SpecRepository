@@ -310,14 +310,18 @@ export function registerAuth(app: FastifyInstance, opts: { authRequired: boolean
     if (opts.authRequired && !req.user) {
       throw new HttpError(401, "Authentication required (Bearer token or x-api-key)");
     }
-    // Enforce role-based policies. If a matching policy exists and the user
-    // is not authenticated, reject — even when authRequired is false.
+    // Enforce role-based policies. Auth-required mode already rejected anonymous
+    // requests above, so reaching here with no user means dev mode (auth disabled):
+    // treat anonymous as the lowest "agent" tier. That keeps zero-config CLI
+    // telemetry working while still blocking author/reviewer/admin actions
+    // (e.g. spec deletion) for anonymous callers.
     for (const policy of POLICIES) {
       if (policy.method.test(req.method) && policy.path.test(path)) {
-        if (!req.user) {
-          throw new HttpError(401, "Authentication required for this action");
-        }
-        if (ROLE_RANK[req.user.role] < ROLE_RANK[policy.min]) {
+        const actorRank = req.user ? ROLE_RANK[req.user.role] : ROLE_RANK.agent;
+        if (actorRank < ROLE_RANK[policy.min]) {
+          if (!req.user) {
+            throw new HttpError(401, "Authentication required for this action");
+          }
           throw new HttpError(403, `Requires role ${policy.min} or higher (you are ${req.user.role})`);
         }
         break;

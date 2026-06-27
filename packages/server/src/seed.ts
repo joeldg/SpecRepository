@@ -103,6 +103,7 @@ Agents should make SpecRegistry usage repeatable and observable. They must load 
 6. Agents must call \`report_spec_feedback\` or the feedback API for ambiguity, contradiction, outdated guidance, or missing requirements.
 7. Agents must distinguish approved specs from drafts, examples, local style guides, and generated prompts.
 8. Agents must not claim checks passed unless they actually ran and observed the result.
+9. Agents must reach the registry only through the MCP server, the documented agent API (\`get_specs\`, \`search_specs\`, \`report_spec_feedback\`), and the \`specreg\` CLI. They must not browse the web dashboard, enumerate or probe other server routes, or inspect the registry's database, filesystem, or internals.
 
 ## Non-Goals
 This spec does not grant an agent permission to access production, secrets, protected branches, or external systems. Host approval and least-privilege rules still apply.
@@ -122,7 +123,7 @@ Workflow rule. Load by default for agents, but keep concise and operational.
 - \`IMPLEMENTATION_EVIDENCE.md\`
 
 ## AI Agent Directives
-Use governed specs as authority. Prefer registry search over broad context loading. Stop on missing or conflicting guidance. Never treat local generated files or examples as published specifications.
+Use governed specs as authority. Prefer registry search over broad context loading. Stop on missing or conflicting guidance. Never treat local generated files or examples as published specifications. Stay within the MCP tools, documented agent API, and \`specreg\` CLI — do not explore or probe the registry server itself.
 `,
   },
   {

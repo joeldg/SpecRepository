@@ -249,6 +249,20 @@ ${skills.length > 0 ? `- Governed agent skill directory: ${skillDir}/\n- Agent s
 Before changing code, load the global and project-type specifications listed in the manifest.
 Treat these as the approved source of truth. Generated repo-specific drafts belong outside
 the governed specs directory until they are submitted through the registry review workflow.
+
+## Access Boundaries
+
+Interact with the registry **only** through the \`specregistry\` MCP server and the documented
+agent API endpoints listed under "MCP" below. Everything an agent needs is exposed there or in
+the local spec bundle under \`${specDir}/\`.
+
+Do not:
+- browse or scrape the web dashboard;
+- enumerate, probe, or fuzz server endpoints beyond the documented agent API;
+- inspect the registry's database, filesystem, logs, or internal/admin routes.
+
+If something you need is missing or unclear, call \`report_spec_feedback\` instead of exploring
+the server. Treating the registry as a general-purpose host to investigate is out of scope.
 ${styleGuides.length > 0 ? `
 ## External Style Guides
 
@@ -283,8 +297,18 @@ Required MCP flow:
 2. Use \`search_specs\` for focused questions.
 3. Report ambiguity, contradiction, or outdated guidance with \`report_spec_feedback\`.
 4. Use \`specreg check\` to verify this repo is still using current approved spec versions.
+
+If the MCP server is unavailable, the same data is available over the documented agent API —
+and only these endpoints:
+
+- \`GET ${server}/api/v1/ai/specs/${encodeURIComponent(projectType)}\` — current governed specs.
+- \`GET ${server}/api/v1/ai/search?q=...\` — focused section search.
+- \`POST ${server}/api/v1/ai/feedback\` — report a spec problem.
+
+Use the \`specreg\` CLI for everything else (\`check\`, \`sync\`, \`compile\`, \`verify\`). Do not call
+other server routes directly.
 `,
     "utf8"
   );
-  console.log("Wrote SPECREGISTRY.md — agents can discover the active specs and MCP workflow from the repo root.");
+  console.log("Wrote SPECREGISTRY.md — agents should use the MCP server and documented agent API only.");
 }

@@ -27,6 +27,20 @@
 - [ ] First-class "spec followed but intent missed" workflow and report type for cases
   where implementation technically complies but the user or operational outcome is wrong.
 
+## Agent Access Control
+
+- [x] Advisory agent access boundaries: `SPECREGISTRY.md` and the `AGENT_OPERATING_RULES`
+  governed spec now constrain agents to the MCP server, the documented agent API
+  (`get_specs`, `search_specs`, `report_spec_feedback`), and the `specreg` CLI — no
+  dashboard browsing, endpoint probing, or server-internals inspection.
+- [ ] Hard agent access enforcement: issue a scoped `agent`-role token during `specreg init`
+  and wire `SPECREG_AUTH=required` into the init/MCP flow so the MCP/API limitation is
+  enforced at the network layer, not just advised. Anything beyond the agent-tier endpoints
+  is then rejected with 401/403 rather than relying on agent cooperation.
+- [ ] Dedicated agent-scope token type (narrower than the `agent` role) that allows only the
+  three agent API endpoints + manifest/code-trace telemetry, with per-repo issuance and
+  revocation from the admin console.
+
 ## Quality and Safety
 
 - [ ] Persisted prompt regression suites: the `/ai/regression-suite` endpoint runs prompts
@@ -39,6 +53,12 @@
 - [ ] Spec baseline quality scoring for required sections, vague language, missing
   acceptance evidence, missing examples/non-goals, token budget mismatch, and repeated
   feedback against the same section.
+- [ ] Bound the code-trace ingest payload explicitly: `raw_json` stores the whole untrusted
+  trace (currently only capped by Fastify's default 1MB body limit). Add an explicit size
+  cap / per-route body limit and dedupe the repeated `repo` reads in the handler.
+- [ ] Gitignore generated/pulled init artifacts (`CLAUDE.md`, `SPECREGISTRY.md`, `specs/`,
+  `.spec/`, `.mcp.json`) in consuming repos and document it, so demo/init output is not
+  accidentally committed.
 
 ## Developer Workflow
 
