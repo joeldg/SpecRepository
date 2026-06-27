@@ -192,6 +192,35 @@ export interface ReportsOverview {
     feedback_total: number;
     pending_reviews: number;
     outdated_specs: number;
+    code_trace_report_id: string | null;
+    code_coverage_ratio: number | null;
+    code_drift_score: number | null;
+    code_drift_severity: "none" | "low" | "medium" | "high" | null;
+    code_linked_entity_count: number | null;
+    code_governed_entity_count: number | null;
+    code_unlinked_entity_count: number | null;
+    code_trace_reported_at: string | null;
+  }>;
+  code_trace_reports: Array<{
+    id: string;
+    consumer_id: string;
+    repo: string;
+    branch: string | null;
+    project_type_name: string;
+    generated_at: string;
+    specs_dir: string;
+    spec_count: number;
+    entity_count: number;
+    governed_entity_count: number;
+    linked_entity_count: number;
+    unlinked_entity_count: number;
+    coverage_ratio: number;
+    drift_score: number;
+    drift_severity: "none" | "low" | "medium" | "high";
+    aliases_count: number;
+    unlinked_sample: string;
+    created_at: string;
+    link_count: number;
   }>;
   global_specs: Array<{
     id: string;

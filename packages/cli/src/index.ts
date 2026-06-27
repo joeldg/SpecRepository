@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import fs from "node:fs";
+import path from "node:path";
 import { loadCliEnv } from "./env.js";
 import { runInit } from "./init.js";
 import { runGenerate } from "./generate.js";
@@ -8,6 +10,7 @@ import { runCompile, COMPILE_TARGETS, type CompileTarget } from "./compile.js";
 import { runVerify } from "./verify.js";
 import { runAudit } from "./audit.js";
 import { writeCodeInventory } from "./codeMetadata.js";
+import { reportCodeTrace, type Manifest } from "./repo.js";
 
 const HELP = `specreg — SpecRegistry developer CLI
 
@@ -34,6 +37,7 @@ Options:
   --out <path>      generate: prompt output directory (default: .spec/prompts)
                     code-map: metadata output file (default: .spec/code-map.json)
   --trace-out <p>   code-map: traceability report file (default: .spec/code-trace.json)
+  --report          code-map: upload .spec/code-trace.json coverage to the registry
   --examples        generate: write companion example templates
   --example-dir <p> generate: example template directory (default: .spec/examples)
   --target <t>      compile: claude | agents | cursor (default: claude)
@@ -83,6 +87,17 @@ const server =
   "http://localhost:4000";
 const token = typeof flags.token === "string" ? flags.token : process.env.SPECREG_TOKEN;
 
+function manifestProjectType(dir: string): string | undefined {
+  const manifestPath = path.resolve(process.cwd(), dir, ".specregistry.json");
+  if (!fs.existsSync(manifestPath)) return undefined;
+  try {
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Manifest;
+    return manifest.project_type;
+  } catch {
+    return undefined;
+  }
+}
+
 try {
   if (flags.help || command === undefined || command === "help") {
     console.log(HELP);
@@ -125,10 +140,11 @@ try {
     });
   } else if (command === "code-map") {
     const out = typeof flags.out === "string" ? flags.out : ".spec/code-map.json";
+    const specsDir = typeof flags.dir === "string" ? flags.dir : "specs";
     const inventory = writeCodeInventory({
       root: process.cwd(),
       out,
-      specsDir: typeof flags.dir === "string" ? flags.dir : "specs",
+      specsDir,
       traceOut: typeof flags["trace-out"] === "string" ? flags["trace-out"] : ".spec/code-trace.json",
       force: flags.force === true,
     });
@@ -136,6 +152,12 @@ try {
     console.log(`Wrote traceability report to ${typeof flags["trace-out"] === "string" ? flags["trace-out"] : ".spec/code-trace.json"}.`);
     console.log(`Code-to-spec coverage: ${Math.round(inventory.trace.coverage.coverage_ratio * 100)}% (${inventory.trace.coverage.linked_entity_count}/${inventory.trace.coverage.governed_entity_count}); drift ${inventory.trace.drift.severity} (${inventory.trace.drift.score}).`);
     console.log(`Languages: ${inventory.languages.join(", ") || "(none)"}`);
+    if (flags.report === true) {
+      const projectType = (typeof flags.type === "string" ? flags.type : undefined) ?? manifestProjectType(specsDir);
+      if (!projectType) throw new Error("code-map --report requires --type or a local specs/.specregistry.json manifest with project_type.");
+      const uploaded = await reportCodeTrace(server, token, projectType, inventory.trace, specsDir);
+      console.log(`Reported code trace coverage to registry: ${Math.round(uploaded.coverage_ratio * 100)}% coverage, drift ${uploaded.drift_severity} (${uploaded.drift_score}).`);
+    }
   } else if (command === "check" || command === "sync") {
     await runSync({
       server,

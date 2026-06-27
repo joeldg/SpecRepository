@@ -82,12 +82,14 @@ Completed adjacent foundations:
   drift score, severity, unmapped entity list, and linked/unlinked coverage counts by kind.
 - [x] Code/AST embedding profile guidance in `.spec/code-trace.json` for separating code
   entity summaries from spec-text embeddings.
+- [x] Server ingestion for `specreg code-map --report`, persisted code trace reports, and
+  project-level Reports UI coverage/drift summaries.
 
 Remaining AST/code metadata work:
 
-- [ ] Deepen the traceability system with server ingestion, UI reports, CI annotations,
-  manual override review, deleted-entity retention, split/merge history, richer dependency
-  graphs, and additional language parsers.
+- [ ] Deepen the traceability system with CI annotations, manual override review,
+  deleted-entity retention, split/merge history, richer dependency graphs, and additional
+  language parsers.
 
 ## Enterprise
 

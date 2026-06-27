@@ -142,6 +142,67 @@ describe("sync-check (CLI drift detection)", () => {
     ]);
   });
 
+  it("records code trace reports for repository consumers", async () => {
+    const report = await app.inject({
+      method: "POST",
+      url: "/api/v1/cli/code-trace-report",
+      payload: {
+        repo: "github.com/acme/traceable",
+        branch: "main",
+        commit_sha: "abc123",
+        project_type: "Acme Edge Device",
+        trace: {
+          schema_version: 1,
+          generated_at: "2026-06-27T00:00:00.000Z",
+          specs_dir: "specs",
+          spec_count: 1,
+          entity_count: 3,
+          coverage: {
+            governed_entity_count: 2,
+            linked_entity_count: 1,
+            unlinked_entity_count: 1,
+            coverage_ratio: 0.5,
+          },
+          drift: { score: 0.5, severity: "medium" },
+          aliases: [{ previous_id: "code:function:old", current_id: "code:function:new", reason: "same_hash" }],
+          links: [
+            {
+              entity_id: "code:route:abc",
+              entity_name: "GET /users/:id",
+              entity_kind: "route",
+              spec_filename: "API.md",
+              confidence: 0.9,
+              reasons: ["route path appears in spec"],
+            },
+          ],
+          unlinked_entities: [{ id: "code:schema:def", kind: "schema", path: "db.sql", name: "users", signature: "CREATE TABLE users" }],
+        },
+      },
+    });
+    expect(report.statusCode).toBe(200);
+    expect(report.json()).toMatchObject({
+      ok: true,
+      repo: "github.com/acme/traceable",
+      coverage_ratio: 0.5,
+      drift_score: 0.5,
+      drift_severity: "medium",
+      links: 1,
+    });
+
+    const overview = await getJson("/api/v1/reports/overview");
+    expect(overview.code_trace_reports.find((row: any) => row.repo === "github.com/acme/traceable")).toMatchObject({
+      coverage_ratio: 0.5,
+      drift_severity: "medium",
+      link_count: 1,
+      aliases_count: 1,
+    });
+    expect(overview.projects.find((row: any) => row.repo === "github.com/acme/traceable")).toMatchObject({
+      code_coverage_ratio: 0.5,
+      code_drift_score: 0.5,
+      code_drift_severity: "medium",
+    });
+  });
+
   it("allows project-scoped specs to override project-type specs for one repo", async () => {
     const project = (
       await app.inject({
@@ -1189,9 +1250,9 @@ describe("LLM spec automation", () => {
     const initial = await getJson("/api/v1/features/config");
     expect(initial.code_metadata.typescript_javascript).toBe(true);
     expect(initial.catalog.code_metadata.find((feature: any) => feature.key === "traceability_graph")).toMatchObject({
-      stage: "planned",
+      stage: "available",
     });
-    expect(initial.code_metadata.traceability_graph).toBe(false);
+    expect(initial.code_metadata.traceability_graph).toBe(true);
     const enabled = await app.inject({
       method: "PUT",
       url: "/api/v1/features/config",

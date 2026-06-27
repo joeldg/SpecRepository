@@ -457,6 +457,7 @@ Generate code metadata sidecars for AST/code-to-spec work:
 specreg code-map
 specreg code-map --out .spec/code-map.json --force
 specreg code-map --dir specs --trace-out .spec/code-trace.json
+specreg code-map --report
 ```
 
 `code-map` writes `.spec/code-map.json` with stable code IDs, entity kinds, paths,
@@ -468,6 +469,11 @@ semantic matching. The extractor uses the TypeScript compiler for TypeScript/Jav
 AST entities and lightweight Python/SQL/config extraction for imports, functions, classes,
 routes, commands, config, migrations, tables, fields, and indexes. It does not rewrite
 source files.
+
+Use `specreg code-map --report` to upload the traceability report to the registry. The CLI
+uses `--type` or the local `specs/.specregistry.json` manifest to identify the project type.
+Uploaded reports appear on the Reports page as code-to-spec coverage, drift severity, and
+unmapped implementation counts.
 
 Run an AI conformance audit:
 
@@ -848,6 +854,7 @@ POST /api/v1/spec-generation/preview    POST /api/v1/spec-generation/draft
 GET  /api/v1/automation/features        POST /api/v1/automation/task-plan
 POST /api/v1/automation/ticket          POST /api/v1/automation/section-classifier
 POST /api/v1/automation/context-budget  POST /api/v1/automation/audit-prompt
+POST /api/v1/cli/code-trace-report      GET /api/v1/reports/overview
 GET  /api/v1/automation/audit-prompt/:specId   GET /api/v1/automation/audit-prompts
 POST /api/v1/automation/improvement-suggestions   POST /api/v1/automation/spec-pack
 GET  /api/v1/specs/:type/download[?channel=beta]   GET /api/v1/meta/public-key

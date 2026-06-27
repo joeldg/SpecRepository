@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fetchJson } from "./registry.js";
+import type { CodeTraceReport } from "./codeMetadata.js";
 
 export interface ManifestSpec {
   filename: string;
@@ -65,6 +66,28 @@ export async function reportManifest(
       specs_path: dir,
       manifest_path: `${dir.replace(/\/+$/, "")}/.specregistry.json`,
       source,
+    }),
+  }, token);
+}
+
+export async function reportCodeTrace(
+  server: string,
+  token: string | undefined,
+  projectType: string,
+  trace: CodeTraceReport,
+  dir: string
+): Promise<{ report_id: string; project_id: string; coverage_ratio: number; drift_score: number; drift_severity: string }> {
+  const identity = repoIdentity();
+  return await fetchJson<{ report_id: string; project_id: string; coverage_ratio: number; drift_score: number; drift_severity: string }>(`${server}/api/v1/cli/code-trace-report`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      ...identity,
+      project_type: projectType,
+      specs_path: dir,
+      manifest_path: `${dir.replace(/\/+$/, "")}/.specregistry.json`,
+      source: "code-map",
+      trace,
     }),
   }, token);
 }

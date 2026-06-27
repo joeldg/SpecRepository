@@ -669,7 +669,15 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
                    AND (s.project_id = rc.id OR (s.project_id IS NULL AND (s.project_type_id = rc.project_type_id OR s.project_type_id IN (SELECT id FROM project_types WHERE scope = 'global'))))
                    AND (rcs.version IS NULL OR rcs.version != s.current_version)
                   THEN s.id
-                END) AS outdated_specs
+                END) AS outdated_specs,
+                ctr.id AS code_trace_report_id,
+                ctr.coverage_ratio AS code_coverage_ratio,
+                ctr.drift_score AS code_drift_score,
+                ctr.drift_severity AS code_drift_severity,
+                ctr.linked_entity_count AS code_linked_entity_count,
+                ctr.governed_entity_count AS code_governed_entity_count,
+                ctr.unlinked_entity_count AS code_unlinked_entity_count,
+                ctr.created_at AS code_trace_reported_at
          FROM repo_consumers rc
          JOIN project_types pt ON pt.id = rc.project_type_id
          LEFT JOIN repo_consumer_specs rcs ON rcs.consumer_id = rc.id
@@ -677,8 +685,37 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
          LEFT JOIN specs s ON s.deleted_at IS NULL AND (s.project_id = rc.id OR (s.project_id IS NULL AND (s.project_type_id = rc.project_type_id OR s.project_type_id IN (SELECT id FROM project_types WHERE scope = 'global'))))
          LEFT JOIN agent_feedback af ON af.spec_id = ps.id
          LEFT JOIN change_requests cr ON cr.spec_id = ps.id
+         LEFT JOIN code_trace_reports ctr ON ctr.id = (
+           SELECT id FROM code_trace_reports latest
+           WHERE latest.consumer_id = rc.id
+           ORDER BY latest.created_at DESC
+           LIMIT 1
+         )
          GROUP BY rc.id
          ORDER BY rc.last_seen_at DESC, rc.repo`
+      )
+      .all();
+
+    const codeTraceReports = app.db
+      .prepare(
+        `SELECT ctr.id, ctr.consumer_id, rc.repo, rc.branch, pt.name AS project_type_name,
+                ctr.generated_at, ctr.specs_dir, ctr.spec_count, ctr.entity_count,
+                ctr.governed_entity_count, ctr.linked_entity_count, ctr.unlinked_entity_count,
+                ctr.coverage_ratio, ctr.drift_score, ctr.drift_severity,
+                ctr.aliases_count, ctr.unlinked_sample, ctr.created_at,
+                COUNT(ctl.entity_id) AS link_count
+         FROM code_trace_reports ctr
+         JOIN repo_consumers rc ON rc.id = ctr.consumer_id
+         JOIN project_types pt ON pt.id = rc.project_type_id
+         LEFT JOIN code_trace_links ctl ON ctl.report_id = ctr.id
+         WHERE ctr.id IN (
+           SELECT id FROM code_trace_reports latest
+           WHERE latest.consumer_id = ctr.consumer_id
+           ORDER BY latest.created_at DESC
+           LIMIT 1
+         )
+         GROUP BY ctr.id
+         ORDER BY ctr.drift_score DESC, ctr.coverage_ratio ASC, ctr.created_at DESC`
       )
       .all();
 
@@ -708,6 +745,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       feedback_by_type: feedbackByType,
       project_types: projectTypes.map((row: any) => ({ ...row, usage: usageByType.get(row.id) ?? {} })),
       projects,
+      code_trace_reports: codeTraceReports,
       global_specs: globalSpecs,
     };
   });

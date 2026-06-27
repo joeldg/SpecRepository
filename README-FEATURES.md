@@ -115,6 +115,10 @@ implementation surfaces, calculates coverage and drift summaries, records stable
 when a previous inventory exists, and carries a code embedding profile for future semantic
 matching.
 
+With `specreg code-map --report`, initialized projects can upload `.spec/code-trace.json`
+to the registry. The Reports page then shows project-level code-to-spec coverage, drift
+severity, unmapped implementation counts, and the highest-risk reporting repositories.
+
 Why it matters: this is the metadata foundation for code-to-spec traceability, semantic
 drift scoring, and implementation coverage reports without rewriting source files.
 
@@ -457,6 +461,7 @@ The completed backlog is now broad. The major remaining items are:
 
 - GitHub App integration instead of raw `GITHUB_TOKEN`
 - saved searches for common policy areas
+- CI annotations and manual override review for code traceability reports
 - encrypted-at-rest secrets for LDAP bind passwords and webhook secrets
 - read-only public share links for approved spec bundles
 - SCIM or scheduled LDAP user/group sync

@@ -173,6 +173,38 @@ CREATE TABLE IF NOT EXISTS repo_consumer_specs (
   PRIMARY KEY (consumer_id, filename)
 );
 
+CREATE TABLE IF NOT EXISTS code_trace_reports (
+  id TEXT PRIMARY KEY,
+  consumer_id TEXT NOT NULL REFERENCES repo_consumers(id) ON DELETE CASCADE,
+  generated_at TEXT NOT NULL,
+  specs_dir TEXT NOT NULL DEFAULT 'specs',
+  spec_count INTEGER NOT NULL DEFAULT 0,
+  entity_count INTEGER NOT NULL DEFAULT 0,
+  governed_entity_count INTEGER NOT NULL DEFAULT 0,
+  linked_entity_count INTEGER NOT NULL DEFAULT 0,
+  unlinked_entity_count INTEGER NOT NULL DEFAULT 0,
+  coverage_ratio REAL NOT NULL DEFAULT 0,
+  drift_score REAL NOT NULL DEFAULT 0,
+  drift_severity TEXT NOT NULL DEFAULT 'none',
+  aliases_count INTEGER NOT NULL DEFAULT 0,
+  unlinked_sample TEXT NOT NULL DEFAULT '[]',
+  raw_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_code_trace_reports_consumer_time ON code_trace_reports(consumer_id, created_at);
+
+CREATE TABLE IF NOT EXISTS code_trace_links (
+  report_id TEXT NOT NULL REFERENCES code_trace_reports(id) ON DELETE CASCADE,
+  entity_id TEXT NOT NULL,
+  entity_name TEXT NOT NULL,
+  entity_kind TEXT NOT NULL,
+  spec_filename TEXT NOT NULL,
+  confidence REAL NOT NULL DEFAULT 0,
+  reasons TEXT NOT NULL DEFAULT '[]',
+  PRIMARY KEY (report_id, entity_id, spec_filename)
+);
+CREATE INDEX IF NOT EXISTS idx_code_trace_links_report ON code_trace_links(report_id);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS spec_chunks USING fts5(
   spec_id UNINDEXED,
   section,
@@ -419,6 +451,41 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
   {
     version: 16,
     sql: "ALTER TABLE specs ADD COLUMN deleted_at TEXT"
+  },
+  {
+    version: 17,
+    sql: `
+      CREATE TABLE IF NOT EXISTS code_trace_reports (
+        id TEXT PRIMARY KEY,
+        consumer_id TEXT NOT NULL REFERENCES repo_consumers(id) ON DELETE CASCADE,
+        generated_at TEXT NOT NULL,
+        specs_dir TEXT NOT NULL DEFAULT 'specs',
+        spec_count INTEGER NOT NULL DEFAULT 0,
+        entity_count INTEGER NOT NULL DEFAULT 0,
+        governed_entity_count INTEGER NOT NULL DEFAULT 0,
+        linked_entity_count INTEGER NOT NULL DEFAULT 0,
+        unlinked_entity_count INTEGER NOT NULL DEFAULT 0,
+        coverage_ratio REAL NOT NULL DEFAULT 0,
+        drift_score REAL NOT NULL DEFAULT 0,
+        drift_severity TEXT NOT NULL DEFAULT 'none',
+        aliases_count INTEGER NOT NULL DEFAULT 0,
+        unlinked_sample TEXT NOT NULL DEFAULT '[]',
+        raw_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_code_trace_reports_consumer_time ON code_trace_reports(consumer_id, created_at);
+      CREATE TABLE IF NOT EXISTS code_trace_links (
+        report_id TEXT NOT NULL REFERENCES code_trace_reports(id) ON DELETE CASCADE,
+        entity_id TEXT NOT NULL,
+        entity_name TEXT NOT NULL,
+        entity_kind TEXT NOT NULL,
+        spec_filename TEXT NOT NULL,
+        confidence REAL NOT NULL DEFAULT 0,
+        reasons TEXT NOT NULL DEFAULT '[]',
+        PRIMARY KEY (report_id, entity_id, spec_filename)
+      );
+      CREATE INDEX IF NOT EXISTS idx_code_trace_links_report ON code_trace_links(report_id);
+    `,
   },
 ];
 

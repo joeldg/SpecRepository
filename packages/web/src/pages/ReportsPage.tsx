@@ -215,6 +215,21 @@ export default function ReportsPage() {
   const projectRisk = [...(report?.projects ?? [])]
     .sort((a, b) => b.outdated_specs + b.open_feedback + b.pending_reviews - (a.outdated_specs + a.open_feedback + a.pending_reviews))
     .slice(0, 10);
+  const traceReports = [...(report?.code_trace_reports ?? [])]
+    .sort((a, b) => b.drift_score - a.drift_score || a.coverage_ratio - b.coverage_ratio)
+    .slice(0, 10);
+  const traceSummary = useMemo(() => {
+    const rows = report?.code_trace_reports ?? [];
+    const governed = rows.reduce((sum, row) => sum + Number(row.governed_entity_count ?? 0), 0);
+    const linked = rows.reduce((sum, row) => sum + Number(row.linked_entity_count ?? 0), 0);
+    const high = rows.filter((row) => row.drift_severity === "high").length;
+    return {
+      projects: rows.length,
+      coverage: governed ? linked / governed : 0,
+      high,
+      unmapped: rows.reduce((sum, row) => sum + Number(row.unlinked_entity_count ?? 0), 0),
+    };
+  }, [report]);
 
   return (
     <>
@@ -301,6 +316,39 @@ export default function ReportsPage() {
             )}
           </div>
 
+          <div className="section report-panel">
+            <h2>Code-to-Spec Traceability</h2>
+            <div className="cards" style={{ marginBottom: 12 }}>
+              <div className="card">
+                <div className="metric">{traceSummary.projects}</div>
+                <div className="label">Reporting projects</div>
+              </div>
+              <div className={`card${traceSummary.coverage < 0.5 && traceSummary.projects ? " alert" : ""}`}>
+                <div className="metric">{Math.round(traceSummary.coverage * 100)}%</div>
+                <div className="label">Code coverage</div>
+              </div>
+              <div className={`card${traceSummary.high ? " alert" : ""}`}>
+                <div className="metric">{traceSummary.high}</div>
+                <div className="label">High drift projects</div>
+              </div>
+              <div className="card">
+                <div className="metric">{traceSummary.unmapped}</div>
+                <div className="label">Unmapped entities</div>
+              </div>
+            </div>
+            {traceReports.length === 0 ? (
+              <div className="empty">No code trace reports yet. Run `specreg code-map --report` from a project.</div>
+            ) : (
+              <BarChart
+                data={traceReports.map((row) => ({
+                  label: row.repo,
+                  value: Math.round(row.drift_score * 100),
+                  tone: row.drift_severity === "high" ? "red" : row.drift_severity === "medium" ? "amber" : "green",
+                }))}
+              />
+            )}
+          </div>
+
           <div className="section">
             <h2>Project Type Reports</h2>
             <table className="grid">
@@ -348,6 +396,8 @@ export default function ReportsPage() {
                     <th>Reported specs</th>
                     <th>Project specs</th>
                     <th>Outdated</th>
+                    <th>Code coverage</th>
+                    <th>Code drift</th>
                     <th>Open feedback</th>
                     <th>Pending reviews</th>
                     <th>Last seen</th>
@@ -361,6 +411,18 @@ export default function ReportsPage() {
                       <td className="mono">{p.reported_specs}</td>
                       <td className="mono">{p.project_specs}</td>
                       <td><StatusBadge status={p.outdated_specs ? "pending" : "approved"} /> <span className="mono">{p.outdated_specs}</span></td>
+                      <td className="mono">
+                        {p.code_trace_report_id ? `${Math.round(Number(p.code_coverage_ratio ?? 0) * 100)}% (${p.code_linked_entity_count ?? 0}/${p.code_governed_entity_count ?? 0})` : "not reported"}
+                      </td>
+                      <td>
+                        {p.code_trace_report_id ? (
+                          <>
+                            <StatusBadge status={p.code_drift_severity ?? "none"} /> <span className="mono">{Number(p.code_drift_score ?? 0).toFixed(2)}</span>
+                          </>
+                        ) : (
+                          <span className="faint">none</span>
+                        )}
+                      </td>
                       <td><StatusBadge status={p.open_feedback ? "open" : "resolved"} /> <span className="mono">{p.open_feedback}</span></td>
                       <td><StatusBadge status={p.pending_reviews ? "pending" : "approved"} /> <span className="mono">{p.pending_reviews}</span></td>
                       <td className="faint">{timeAgo(p.last_seen_at)}</td>

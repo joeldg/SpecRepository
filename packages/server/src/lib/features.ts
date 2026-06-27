@@ -91,10 +91,10 @@ const CODE_METADATA_DEFAULTS: Record<CodeMetadataFeatureKey, boolean> = {
   stable_ids: true,
   sidecar_metadata: true,
   inline_metadata: false,
-  traceability_graph: false,
-  semantic_drift: false,
-  code_embedding_profile: false,
-  coverage_reports: false,
+  traceability_graph: true,
+  semantic_drift: true,
+  code_embedding_profile: true,
+  coverage_reports: true,
 };
 
 const AUTOMATION_CATALOG: Array<FeatureDescriptor<AutomationFeatureKey>> = [
@@ -121,10 +121,10 @@ const CODE_METADATA_CATALOG: Array<FeatureDescriptor<CodeMetadataFeatureKey>> = 
   { key: "stable_ids", label: "Stable code IDs", description: "Generate durable entity IDs that survive body-only implementation changes.", stage: "available" },
   { key: "sidecar_metadata", label: "Sidecar metadata", description: "Write `.spec/code-map.json` instead of modifying source files.", stage: "available" },
   { key: "inline_metadata", label: "Inline metadata injection", description: "Optionally write trace IDs into source comments where a team permits it.", stage: "planned" },
-  { key: "traceability_graph", label: "Traceability graph", description: "Link specs, spec sections, code entities, routes, and schemas.", stage: "planned" },
-  { key: "semantic_drift", label: "Semantic drift pipeline", description: "Compare code metadata and embeddings against governed specs.", stage: "planned" },
-  { key: "code_embedding_profile", label: "Code embedding profile", description: "Configure embedding behavior for code entities separately from specs.", stage: "planned" },
-  { key: "coverage_reports", label: "Code-to-spec coverage reports", description: "Report mapped, unmapped, and stale implementation surfaces.", stage: "planned" },
+  { key: "traceability_graph", label: "Traceability graph", description: "Link specs, spec sections, code entities, routes, and schemas.", stage: "available" },
+  { key: "semantic_drift", label: "Semantic drift pipeline", description: "Compare code metadata against governed specs and report drift severity.", stage: "available" },
+  { key: "code_embedding_profile", label: "Code embedding profile", description: "Configure embedding guidance for code entities separately from specs.", stage: "available" },
+  { key: "coverage_reports", label: "Code-to-spec coverage reports", description: "Report mapped, unmapped, and stale implementation surfaces.", stage: "available" },
 ];
 
 function envFlag(envName: string, fallback: boolean): boolean {
