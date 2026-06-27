@@ -1,6 +1,8 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 import type { FastifyInstance } from "fastify";
 import type { Spec, StubPrompt, StubPromptResponse, SyncCheckResponse } from "@specregistry/shared";
 import { findProjectConsumer, HttpError, requireProjectType, requireString } from "../helpers.js";
@@ -67,17 +69,72 @@ function ensureConsumer(app: FastifyInstance, input: Record<string, unknown>, pr
   return id;
 }
 
+function latestMtimeMs(target: string): number {
+  if (!fs.existsSync(target)) return 0;
+  const stat = fs.statSync(target);
+  if (!stat.isDirectory()) return stat.mtimeMs;
+  let latest = stat.mtimeMs;
+  for (const entry of fs.readdirSync(target, { withFileTypes: true })) {
+    if (entry.name === "node_modules") continue;
+    latest = Math.max(latest, latestMtimeMs(path.join(target, entry.name)));
+  }
+  return latest;
+}
+
+function ensureCliTarball(repoRoot: string): string {
+  const cliPackage = JSON.parse(fs.readFileSync(path.join(repoRoot, "packages/cli/package.json"), "utf8")) as { version?: string };
+  const filename = `specregistry-cli-${cliPackage.version ?? "0.1.0"}.tgz`;
+  const explicit = path.join(repoRoot, filename);
+  if (fs.existsSync(explicit)) return explicit;
+
+  const cacheDir = process.env.SPECREG_CLI_PACK_DIR ?? path.join(os.tmpdir(), "specregistry-cli-pack");
+  const npmCache = path.join(cacheDir, "npm-cache");
+  const target = path.join(cacheDir, filename);
+  const sourceMtime = Math.max(
+    latestMtimeMs(path.join(repoRoot, "packages/cli/src")),
+    latestMtimeMs(path.join(repoRoot, "packages/cli/package.json")),
+    latestMtimeMs(path.join(repoRoot, "packages/cli/tsconfig.json")),
+    latestMtimeMs(path.join(repoRoot, "packages/shared/src")),
+    latestMtimeMs(path.join(repoRoot, "packages/shared/package.json")),
+    latestMtimeMs(path.join(repoRoot, "package-lock.json"))
+  );
+  if (fs.existsSync(target) && fs.statSync(target).mtimeMs >= sourceMtime) return target;
+
+  fs.mkdirSync(cacheDir, { recursive: true });
+  fs.mkdirSync(npmCache, { recursive: true });
+  const env = { ...process.env, npm_config_cache: npmCache };
+  execFileSync("npm", ["run", "build", "-w", "@specregistry/shared"], { cwd: repoRoot, env, stdio: "pipe" });
+  execFileSync("npm", ["run", "build", "-w", "@specregistry/cli"], { cwd: repoRoot, env, stdio: "pipe" });
+  for (const file of fs.readdirSync(cacheDir)) {
+    if (file.endsWith(".tgz")) fs.rmSync(path.join(cacheDir, file), { force: true });
+  }
+  const packed = execFileSync("npm", ["pack", "-w", "@specregistry/cli", "--pack-destination", cacheDir], {
+    cwd: repoRoot,
+    env,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  })
+    .trim()
+    .split(/\r?\n/)
+    .pop();
+  const packedPath = path.join(cacheDir, packed || filename);
+  if (!fs.existsSync(packedPath)) throw new Error("npm pack did not produce a CLI tarball");
+  return packedPath;
+}
+
 export async function stubPromptRoutes(app: FastifyInstance): Promise<void> {
   app.get("/cli/download", async (req, reply) => {
     const here = path.dirname(fileURLToPath(import.meta.url));
     const repoRoot = path.resolve(here, "../../../..");
-    const tgzPath = path.resolve(repoRoot, "specregistry-cli-0.1.0.tgz");
-    if (!fs.existsSync(tgzPath)) {
-      throw new HttpError(404, "CLI tarball not found. Please build and pack it on the server first.");
+    let tgzPath: string;
+    try {
+      tgzPath = ensureCliTarball(repoRoot);
+    } catch (err) {
+      throw new HttpError(500, `CLI tarball could not be built: ${err instanceof Error ? err.message : String(err)}`);
     }
     const stream = fs.createReadStream(tgzPath);
     reply.header("content-type", "application/gzip");
-    reply.header("content-disposition", "attachment; filename=specregistry-cli-0.1.0.tgz");
+    reply.header("content-disposition", `attachment; filename=${path.basename(tgzPath)}`);
     return reply.send(stream);
   });
 

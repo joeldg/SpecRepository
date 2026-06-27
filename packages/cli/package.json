@@ -7,20 +7,20 @@
     "specreg": "dist/index.js"
   },
   "main": "dist/index.js",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/index.ts",
     "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
-    "@specregistry/shared": "*",
     "adm-zip": "^0.5.16",
     "typescript": "^5.6.0"
   },
-  "bundleDependencies": [
-    "@specregistry/shared"
-  ],
   "devDependencies": {
+    "@specregistry/shared": "*",
     "@types/adm-zip": "^0.5.5",
     "@types/node": "^22.0.0",
     "tsx": "^4.19.0"
