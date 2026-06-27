@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import AdmZip from "adm-zip";
 import { buildApp } from "../src/app.js";
 import { createDb } from "../src/db.js";
-import { seed } from "../src/seed.js";
+import { seed, SPECREGISTRY_OPERATING_BASELINE_FILENAMES } from "../src/seed.js";
 import { buildAdminTestApp } from "./helpers.js";
 
 let app: FastifyInstance;
@@ -60,7 +60,7 @@ describe("spec compiler", () => {
     expect(res.content).toContain("Use `contradiction` when the Consistent gate fails.");
     expect(res.content).toContain("# Global Security Standards");
     expect(res.content).toContain("# Acme Edge Device — Design Specification");
-    expect(res.specs.length).toBe(5);
+    expect(res.specs.length).toBe(5 + SPECREGISTRY_OPERATING_BASELINE_FILENAMES.length);
 
     const cursor = await getJson(app, "/api/v1/specs/Web%20App%20Standard/compile?target=cursor");
     expect(cursor.target_filename).toBe(".cursorrules");

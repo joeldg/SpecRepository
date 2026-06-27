@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import AdmZip from "adm-zip";
 import { createDb } from "../src/db.js";
-import { seed } from "../src/seed.js";
+import { seed, SPECREGISTRY_BASELINE_REQUIRED_SECTIONS, SPECREGISTRY_OPERATING_BASELINE_FILENAMES } from "../src/seed.js";
 import { buildAdminTestApp } from "./helpers.js";
 
 let app: FastifyInstance;
@@ -44,9 +44,24 @@ describe("project types & specs", () => {
 
   it("lists all specs as summaries with counts", async () => {
     const specs = await getJson("/api/v1/specs");
-    expect(specs.length).toBe(9);
+    expect(specs.length).toBe(9 + SPECREGISTRY_OPERATING_BASELINE_FILENAMES.length);
     expect(specs[0]).not.toHaveProperty("content");
     expect(specs[0]).toHaveProperty("open_feedback_count");
+  });
+
+  it("seeds the SpecRegistry operating baseline with strict SDD sections", async () => {
+    const specs = await getJson("/api/v1/specs");
+    const baseline = specs.filter((s: any) => SPECREGISTRY_OPERATING_BASELINE_FILENAMES.includes(s.filename));
+    expect(baseline.map((s: any) => s.filename).sort()).toEqual([...SPECREGISTRY_OPERATING_BASELINE_FILENAMES].sort());
+    for (const summary of baseline) {
+      const detail = await getJson(`/api/v1/specs/${summary.id}`);
+      for (const section of SPECREGISTRY_BASELINE_REQUIRED_SECTIONS) {
+        expect(detail.content).toContain(`## ${section}`);
+      }
+      expect(detail.content).toContain("## AI Agent Directives");
+      expect(detail.content).toMatch(/Token Budget Class/);
+      expect(detail.audit_prompt).toContain("Audit an implementation");
+    }
   });
 
   it("creates, edits, and publishes a draft spec", async () => {
@@ -348,7 +363,7 @@ describe("CLI support endpoints", () => {
     expect(names).toContain(".specregistry.json");
     const manifest = JSON.parse(zip.readAsText(".specregistry.json"));
     expect(manifest.project_type).toBe("Acme Edge Device");
-    expect(manifest.specs.length).toBe(5);
+    expect(manifest.specs.length).toBe(5 + SPECREGISTRY_OPERATING_BASELINE_FILENAMES.length);
   });
 
   it("substitutes project type and languages into stub prompts", async () => {

@@ -16,6 +16,9 @@
 
 ## Governance
 
+- [x] Built-in SpecRegistry Operating Baseline global specs covering strict SDD process,
+  agent behavior, spec authoring, governance, traceability/observability, tokenomics,
+  implementation evidence, security/secrets, and project profiles.
 - [x] Spec impact analysis before approval/publish, including affected manifest consumers,
   repo subscriptions, downstream spec references, feedback, recent usage, and risk level.
 - LLM-assisted contradiction detection: current contradiction reports use deterministic

@@ -4,6 +4,18 @@ This document summarizes the major features added and refined during the SpecReg
 
 ## Spec Governance Core
 
+### SpecRegistry Operating Baseline
+
+Fresh registries seed a global SDD operating baseline: SDD operating model, agent rules,
+spec authoring standard, governance, traceability/observability, tokenomics,
+implementation evidence, security/secrets, and project profile specs. These specs define
+how agents and humans should use SpecRegistry itself: load governed context, treat drift as
+blocking, report ambiguity instead of guessing, preserve review workflow, generate
+traceability evidence, and keep token cost observable.
+
+Why it matters: the default registry now governs its own operating loop instead of only
+shipping demo project examples.
+
 ### Versioned Markdown Specs
 
 SpecRegistry manages Markdown specification files as governed source-of-truth documents. Specs move through draft, review, approval, publication, immutable version snapshots, and semantic version bumps.

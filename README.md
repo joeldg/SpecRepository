@@ -635,7 +635,25 @@ That requires a server LLM provider configured through Settings or environment v
 
 ### Sample Data
 
-Beyond the built-in Acme demo seed, an **AI-SDD sample spec pack** populates a running
+Fresh databases seed a **SpecRegistry Operating Baseline** into the Global project type.
+These are the always-available SDD process specs that teach agents and humans how to use
+the registry correctly:
+
+- `SDD_OPERATING_MODEL.md`
+- `AGENT_OPERATING_RULES.md`
+- `SPEC_AUTHORING_STANDARD.md`
+- `SPEC_GOVERNANCE.md`
+- `TRACEABILITY_AND_OBSERVABILITY.md`
+- `TOKENOMICS.md`
+- `IMPLEMENTATION_EVIDENCE.md`
+- `SECURITY_AND_SECRETS.md`
+- `PROJECT_PROFILE.md`
+
+Each baseline spec includes Scope, Intent, Requirements, Non-Goals, Acceptance Evidence,
+Token Budget Class, Related Specs, and AI Agent Directives. Existing databases receive
+missing baseline specs idempotently on startup/seed.
+
+Beyond the built-in baseline and Acme demo seed, an **AI-SDD sample spec pack** populates a running
 registry with realistic content — 6 org-wide process specs (agent operating rules, git flow,
 code standards, documentation, observability, ticket workflow) plus an *Embedded Systems
 Platform* project type with 8 technical contract specs (system, API, SNMP, UDP, protobuf,
@@ -719,6 +737,7 @@ Use the LDAP tester in Settings before switching users over.
 
 - **Hierarchy** — project types are rows, not code. A seeded `scope=global` type holds
   organization-wide specs; every download/agent query bundles global + type specs.
+  The built-in SpecRegistry Operating Baseline is the default global SDD process pack.
   The Acme types are demo seed data; additional built-in starter types include MCP Server
   / Agent Integration, SaaS Backend API, CLI Tool / Developer Tooling, AI-SDD Governed
   Project, Data Platform / ETL Pipeline, Internal Admin Tool, and Mobile App.

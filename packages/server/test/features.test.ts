@@ -281,23 +281,21 @@ describe("sync-check (CLI drift detection)", () => {
   });
 
   it("reports drift after a spec version bump", async () => {
+    const summaries = await getJson("/api/v1/specs");
+    const currentManifest = summaries
+      .filter((s: any) => s.status === "published" && (s.project_type_name === "Acme Edge Device" || s.project_type_scope === "global"))
+      .map((s: any) => ({ filename: s.filename, version: s.current_version }));
     const clean = await app.inject({
       method: "POST",
       url: "/api/v1/cli/sync-check",
       payload: {
         project_type: "Acme Edge Device",
-        specs: [
-          { filename: "DESIGN.md", version: "1.0.0" },
-          { filename: "STRUCTURE.md", version: "1.0.0" },
-          { filename: "API.md", version: "1.0.0" },
-          { filename: "GLOBAL_SECURITY.md", version: "1.0.0" },
-          { filename: "CODING_STANDARDS.md", version: "1.0.0" },
-        ],
+        specs: currentManifest,
       },
     });
     expect(clean.statusCode).toBe(200);
     expect(clean.json().drift).toBe(false);
-    expect(clean.json().up_to_date.length).toBe(5);
+    expect(clean.json().up_to_date.length).toBe(currentManifest.length);
 
     // Bump DESIGN.md via the review workflow
     const spec = await findSpec("DESIGN.md", "Acme Edge Device");
@@ -334,7 +332,7 @@ describe("sync-check (CLI drift detection)", () => {
         within_pin: true,
       },
     ]);
-    expect(body.missing_locally.length).toBe(4);
+    expect(body.missing_locally.length).toBe(currentManifest.length - 1);
   });
 
   it("diagnoses an uploaded manifest without storing a project report", async () => {
