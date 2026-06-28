@@ -14,6 +14,10 @@ export interface User {
   role: Role;
   password_hash: string | null;
   source: "local" | "ldap";
+  /** Repo an enrolled agent identity is bound to (null for humans). */
+  repo: string | null;
+  /** Project type an enrolled agent is bound to (null for humans). */
+  project_type_id: string | null;
   created_at: string;
 }
 
@@ -76,12 +80,20 @@ export function findUser(db: Db, username: string): User | undefined {
 
 export function createUser(
   db: Db,
-  input: { username: string; role: Role; password?: string; display_name?: string; source?: "local" | "ldap" }
+  input: {
+    username: string;
+    role: Role;
+    password?: string;
+    display_name?: string;
+    source?: "local" | "ldap";
+    repo?: string;
+    project_type_id?: string;
+  }
 ): User {
   const id = uuid();
   db.prepare(
-    `INSERT INTO users (id, username, display_name, role, password_hash, source, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO users (id, username, display_name, role, password_hash, source, repo, project_type_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     input.username,
@@ -89,9 +101,43 @@ export function createUser(
     input.role,
     input.password ? hashPassword(input.password) : null,
     input.source ?? "local",
+    input.repo ?? null,
+    input.project_type_id ?? null,
     now()
   );
   return db.prepare("SELECT * FROM users WHERE id = ?").get(id) as User;
+}
+
+/**
+ * Self-service agent enrollment: find-or-create an `agent`-role identity bound to a
+ * repo + project type and issue a fresh token. Agents authenticate as themselves
+ * (never admin) and can only self-publish project-scoped specs for their own repo.
+ */
+export function enrollAgent(
+  db: Db,
+  input: { repo: string; projectTypeId: string; displayName?: string }
+): { token: string; username: string; role: Role; repo: string } {
+  const username = `agent:${input.repo}`;
+  let user = findUser(db, username);
+  if (!user) {
+    user = createUser(db, {
+      username,
+      role: "agent",
+      display_name: input.displayName ?? `Agent for ${input.repo}`,
+      repo: input.repo,
+      project_type_id: input.projectTypeId,
+    });
+  } else if (user.role !== "agent") {
+    throw new HttpError(409, `Identity ${username} exists with role ${user.role}; cannot enroll as agent`);
+  } else {
+    db.prepare("UPDATE users SET project_type_id = ?, repo = ? WHERE id = ?").run(
+      input.projectTypeId,
+      input.repo,
+      user.id
+    );
+  }
+  const token = issueToken(db, user.id, "agent enrollment");
+  return { token, username, role: "agent", repo: input.repo };
 }
 
 // --- Optional LDAP (active when LDAP_URL is configured) ---
@@ -265,6 +311,7 @@ const PUBLIC_PATHS = [
   "/api/v1/health",
   "/metrics",
   "/api/v1/auth/login",
+  "/api/v1/agents/enroll", // gated by SPECREG_ENROLL_SECRET / dev-open
   "/api/v1/meta/public-key",
   "/api/v1/integrations/", // verified by their own HMAC secrets
 ];
@@ -289,6 +336,13 @@ const POLICIES: Array<{ method: RegExp; path: RegExp; min: Role }> = [
   { method: /PUT/, path: /^\/api\/v1\/auth\/users\/[^/]+\/password$/, min: "agent" },
   { method: /GET|POST|DELETE/, path: /^\/api\/v1\/auth\/users(\/|$)/, min: "admin" },
   { method: /GET|POST|DELETE/, path: /^\/api\/v1\/auth\/api-keys(\/|$)/, min: "admin" },
+  // Agents reach the spec create/edit/publish/review handlers, which then restrict
+  // them to project-scoped specs for their own repo (see specRoutes.assertAgentScope).
+  // These must precede the author catch-all below so agent tokens aren't 403'd first.
+  { method: /POST/, path: /^\/api\/v1\/specs$/, min: "agent" },
+  { method: /POST/, path: /^\/api\/v1\/specs\/[^/]+\/publish$/, min: "agent" },
+  { method: /PUT/, path: /^\/api\/v1\/specs\/[^/]+$/, min: "agent" },
+  { method: /POST/, path: /^\/api\/v1\/specs\/review$/, min: "agent" },
   { method: /POST|PUT/, path: /^\/api\/v1\/specs(\/|$)/, min: "author" },
   { method: /POST|PUT/, path: /^\/api\/v1\/project-types(\/|$)/, min: "author" },
 ];

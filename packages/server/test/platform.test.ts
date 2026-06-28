@@ -684,3 +684,149 @@ describe("AI endpoints without a key", () => {
     }
   });
 });
+
+describe("agent identity, scope, and separation of duties", () => {
+  async function enroll(repo: string, projectType = "Web App Standard") {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/agents/enroll",
+      payload: { repo, project_type: projectType },
+    });
+    expect(res.statusCode).toBe(201);
+    return res.json() as { token: string; username: string; role: string };
+  }
+  function asAgent(token: string) {
+    return { authorization: `Bearer ${token}` };
+  }
+
+  it("enrolls an agent-role identity bound to the repo", async () => {
+    const agent = await enroll("github.com/acme/game");
+    expect(agent.role).toBe("agent");
+    expect(agent.username).toBe("agent:github.com/acme/game");
+    expect(agent.token).toMatch(/^sreg_/);
+  });
+
+  it("lets an agent create + publish its own project-scoped spec but not a governed one", async () => {
+    const repo = "github.com/acme/game";
+    const types = await getJson(app, "/api/v1/project-types");
+    const web = types.find((t: any) => t.name === "Web App Standard");
+    // register the repo as a project consumer
+    const project = (
+      await app.inject({
+        method: "POST",
+        url: "/api/v1/cli/manifest-report",
+        payload: { repo, project_type: "Web App Standard", specs: [] },
+      })
+    ).json();
+    const agent = await enroll(repo);
+
+    // project-scoped create + publish: allowed
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/specs",
+      headers: asAgent(agent.token),
+      payload: {
+        project_type_id: web.id,
+        project_id: project.project_id,
+        filename: "STYLE_NOTES.md",
+        content: "# Style notes\n\n## Scope\nlocal\n",
+        updated_by: "ignored",
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json().updated_by).toBe(agent.username); // identity forced
+    const published = await app.inject({
+      method: "POST",
+      url: `/api/v1/specs/${created.json().id}/publish`,
+      headers: asAgent(agent.token),
+      payload: {},
+    });
+    expect(published.statusCode).toBe(200);
+    expect(published.json().status).toBe("published");
+
+    // governed (no project_id) create: forbidden
+    const governed = await app.inject({
+      method: "POST",
+      url: "/api/v1/specs",
+      headers: asAgent(agent.token),
+      payload: { project_type_id: web.id, filename: "DESIGN.md", content: "x", updated_by: "a" },
+    });
+    expect(governed.statusCode).toBe(403);
+  });
+
+  it("forbids an agent from approving any change request", async () => {
+    const spec = await findSpec("DESIGN.md", "Acme Edge Device");
+    const cr = await submitCr(spec.id, "# proposed by human\n", "patch");
+    const agent = await enroll("github.com/acme/other");
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/v1/reviews/${cr.id}/approve`,
+      headers: asAgent(agent.token),
+      payload: { reviewed_by: agent.username },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("blocks a reviewer from approving their own proposal (separation of duties)", async () => {
+    // create two reviewers with tokens
+    await app.inject({ method: "POST", url: "/api/v1/auth/users", payload: { username: "rev1", role: "reviewer", password: "x" } });
+    await app.inject({ method: "POST", url: "/api/v1/auth/users", payload: { username: "rev2", role: "reviewer", password: "x" } });
+    const rev1 = (await app.inject({ method: "POST", url: "/api/v1/auth/api-keys", payload: { username: "rev1" } })).json().token;
+    const rev2 = (await app.inject({ method: "POST", url: "/api/v1/auth/api-keys", payload: { username: "rev2" } })).json().token;
+
+    const spec = await findSpec("STRUCTURE.md", "Acme Edge Device");
+    const cr = (
+      await app.inject({
+        method: "POST",
+        url: "/api/v1/specs/review",
+        payload: { spec_id: spec.id, proposed_content: "# rev1 change\n", version_delta: "patch", proposed_by: "rev1" },
+      })
+    ).json();
+
+    const selfApprove = await app.inject({
+      method: "POST",
+      url: `/api/v1/reviews/${cr.id}/approve`,
+      headers: { authorization: `Bearer ${rev1}` },
+      payload: { reviewed_by: "rev1" },
+    });
+    expect(selfApprove.statusCode).toBe(403);
+
+    const otherApprove = await app.inject({
+      method: "POST",
+      url: `/api/v1/reviews/${cr.id}/approve`,
+      headers: { authorization: `Bearer ${rev2}` },
+      payload: { reviewed_by: "rev2" },
+    });
+    expect(otherApprove.statusCode).toBe(200);
+  });
+
+  it("blocks admin self-approval unless explicitly enabled", async () => {
+    const spec = await findSpec("API.md", "Acme Edge Device");
+    const cr = (
+      await app.inject({
+        method: "POST",
+        url: "/api/v1/specs/review",
+        payload: { spec_id: spec.id, proposed_content: "# admin change\n", version_delta: "patch", proposed_by: "admin" },
+      })
+    ).json();
+
+    const blocked = await app.inject({
+      method: "POST",
+      url: `/api/v1/reviews/${cr.id}/approve`,
+      payload: { reviewed_by: "admin" },
+    });
+    expect(blocked.statusCode).toBe(403);
+
+    process.env.SPECREG_ALLOW_ADMIN_SELF_APPROVE = "true";
+    try {
+      const allowed = await app.inject({
+        method: "POST",
+        url: `/api/v1/reviews/${cr.id}/approve`,
+        payload: { reviewed_by: "admin" },
+      });
+      expect(allowed.statusCode).toBe(200);
+    } finally {
+      delete process.env.SPECREG_ALLOW_ADMIN_SELF_APPROVE;
+    }
+  });
+});

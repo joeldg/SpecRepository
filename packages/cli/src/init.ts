@@ -5,6 +5,7 @@ import AdmZip from "adm-zip";
 import type { Spec } from "@specregistry/shared";
 import { fetchJson, registryToken, selectProjectType, withRegistryAuth } from "./registry.js";
 import { repoIdentity, reportManifest, type Manifest } from "./repo.js";
+import { enrollAgent } from "./credentials.js";
 import { installGoogleStyleGuides, type InstalledStyleGuide } from "./styleguides.js";
 import { renderProjectProfile, runProjectSetupWizard, type ProjectProfile } from "./projectWizard.js";
 import { installAgentSkills, listAgentSkills, resolveAgentSkills, type AgentSkill } from "./skills.js";
@@ -34,8 +35,17 @@ export async function runInit(opts: InitOptions): Promise<void> {
   console.log(`\nFetching latest approved specs for "${projectType.name}"...`);
 
   const identity = repoIdentity();
+
+  // Give this repo its own agent identity so it authenticates as itself (never admin)
+  // for submissions, telemetry, and project-scoped specs. Falls back to anonymous if
+  // enrollment is disabled on the server.
+  const token = opts.token ?? (await enrollAgent(opts.server, identity.repo, projectType.name));
+  if (token && !opts.token) {
+    console.log(`Enrolled agent identity for ${identity.repo}; token stored in .spec/credentials.json (gitignored).`);
+  }
+
   const url = `${opts.server}/api/v1/specs/${encodeURIComponent(projectType.name)}/download?repo=${encodeURIComponent(identity.repo)}`;
-  const res = await fetch(url, withRegistryAuth(undefined, opts.token));
+  const res = await fetch(url, withRegistryAuth(undefined, token));
   if (!res.ok) {
     throw new Error(`Download failed: ${res.status} ${res.statusText}`);
   }
@@ -77,11 +87,11 @@ export async function runInit(opts: InitOptions): Promise<void> {
   }
   installAgentSkills(skills, opts.skillDir, opts.force === true);
 
-  writeMcpConfig(opts.server, projectType.name, identity.repo, registryToken(opts.token));
-  writeRegistryGuide(opts.server, projectType.name, identity.repo, opts.dir, registryToken(opts.token), styleGuides, opts.styleguideDir, skills, opts.skillDir);
+  writeMcpConfig(opts.server, projectType.name, identity.repo, registryToken(token));
+  writeRegistryGuide(opts.server, projectType.name, identity.repo, opts.dir, registryToken(token), styleGuides, opts.styleguideDir, skills, opts.skillDir);
   let projectId: string | undefined;
   try {
-    const reported = await reportManifest(opts.server, opts.token, nextManifest, opts.dir, "init");
+    const reported = await reportManifest(opts.server, token, nextManifest, opts.dir, "init");
     projectId = reported.project_id;
     console.log("Reported local spec manifest to the registry.");
     console.log(`Project scope: ${reported.project_id}`);
@@ -91,7 +101,7 @@ export async function runInit(opts: InitOptions): Promise<void> {
   if (profile) {
     writeProjectProfile(profile, projectType.name);
     if (projectId) {
-      await submitProjectProfile(opts.server, opts.token, projectType.id, projectId, profile, projectType.name);
+      await submitProjectProfile(opts.server, token, projectType.id, projectId, profile, projectType.name);
     } else {
       console.log("The local project profile draft was preserved but could not be submitted without a reported project scope.");
     }
@@ -257,12 +267,24 @@ agent API endpoints listed under "MCP" below. Everything an agent needs is expos
 the local spec bundle under \`${specDir}/\`.
 
 Do not:
-- browse or scrape the web dashboard;
+- browse, log into, or scrape the web dashboard;
 - enumerate, probe, or fuzz server endpoints beyond the documented agent API;
 - inspect the registry's database, filesystem, logs, or internal/admin routes.
 
 If something you need is missing or unclear, call \`report_spec_feedback\` instead of exploring
 the server. Treating the registry as a general-purpose host to investigate is out of scope.
+
+## Identity & Approvals
+
+This repo has its own **agent identity** (token in \`.spec/credentials.json\`, gitignored); the
+\`specreg\` CLI and the MCP server use it automatically. Authenticate only as this agent —
+**never log in as \`admin\`** or any human account, and never look for shared credentials.
+
+You may freely create, edit, and publish **project-scoped** specs for this repo (e.g. its own
+\`DESIGN.md\` / \`STRUCTURE.md\` details). You may **propose** changes to global and project-type
+specs via the review workflow, but you **cannot approve or publish** them — approval is a human
+action performed outside your tools. Never attempt to approve your own changes. Submit, then stop
+and let a human review; do not try to escalate privileges to get something merged.
 ${styleGuides.length > 0 ? `
 ## External Style Guides
 

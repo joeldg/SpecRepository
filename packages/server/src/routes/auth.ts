@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
-import { HttpError, requireOneOf, requireString } from "../helpers.js";
+import { HttpError, requireOneOf, requireProjectType, requireString } from "../helpers.js";
 import {
   createUser,
+  enrollAgent,
   findUser,
   hashPassword,
   issueToken,
@@ -18,6 +19,40 @@ function publicUser(user: Record<string, unknown>) {
 }
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
+  // Self-service agent enrollment. Issues an agent-role token bound to a repo +
+  // project type so agents authenticate as themselves (never admin). Open in dev;
+  // when SPECREG_ENROLL_SECRET is set (recommended for auth-required deployments)
+  // the caller must present a matching x-enroll-secret header.
+  app.post("/agents/enroll", async (req, reply) => {
+    const secret = process.env.SPECREG_ENROLL_SECRET;
+    const authRequired = process.env.SPECREG_AUTH === "required";
+    if (secret) {
+      if (req.headers["x-enroll-secret"] !== secret) {
+        throw new HttpError(401, "Invalid or missing x-enroll-secret");
+      }
+    } else if (authRequired) {
+      throw new HttpError(403, "Agent enrollment is disabled; set SPECREG_ENROLL_SECRET on the server to enable it");
+    }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const repo = requireString(body, "repo");
+    const pt = requireProjectType(app.db, requireString(body, "project_type"));
+    const enrolled = enrollAgent(app.db, {
+      repo,
+      projectTypeId: pt.id,
+      displayName: typeof body.display_name === "string" ? body.display_name : undefined,
+    });
+    recordAudit(app.db, {
+      actor: "system",
+      action: "agent.enrolled",
+      target_type: "user",
+      target_id: enrolled.username,
+      summary: `Agent enrolled for ${repo} (${pt.name})`,
+      detail: { repo, project_type: pt.name },
+    });
+    reply.code(201);
+    return { ...enrolled, project_type: pt.name };
+  });
+
   // Local or LDAP login (LDAP wins when LDAP_URL is configured).
   app.post("/auth/login", async (req) => {
     const body = (req.body ?? {}) as Record<string, unknown>;

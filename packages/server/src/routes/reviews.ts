@@ -169,6 +169,25 @@ export async function reviewRoutes(app: FastifyInstance): Promise<void> {
     ) {
       throw new HttpError(403, `This spec requires review by one of: ${policyRequired.join(", ")}`);
     }
+    // Separation of duties: you cannot approve a change request you proposed.
+    // Always enforced for non-admins; admins are blocked too unless an operator
+    // explicitly enables allow_admin_self_approve for solo/local work.
+    const proposer = (cr.proposed_by ?? "").trim().toLowerCase();
+    const approver = (req.user?.username ?? reviewedBy).trim().toLowerCase();
+    if (proposer && approver === proposer) {
+      const allowAdminSelfApprove =
+        process.env.SPECREG_ALLOW_ADMIN_SELF_APPROVE === "true" ||
+        (app.db.prepare("SELECT value FROM settings WHERE key = 'allow_admin_self_approve'").get() as
+          | { value?: string }
+          | undefined)?.value === "true";
+      if (!(req.user?.role === "admin" && allowAdminSelfApprove)) {
+        throw new HttpError(
+          403,
+          "Separation of duties: you cannot approve a change request you proposed. A different reviewer must approve it."
+        );
+      }
+    }
+
     try {
       app.db
         .prepare("INSERT INTO review_approvals (id, change_request_id, reviewer, created_at) VALUES (?, ?, ?, ?)")

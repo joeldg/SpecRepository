@@ -105,6 +105,8 @@ Agents should make SpecRegistry usage repeatable and observable. They must load 
 8. Agents must distinguish approved specs from drafts, examples, local style guides, and generated prompts.
 9. Agents must not claim checks passed unless they actually ran and observed the result.
 10. Agents must reach the registry only through the MCP server, the documented agent API (\`get_specs\`, \`search_specs\`, \`resolve_guidance\`, \`report_spec_feedback\`), and the \`specreg\` CLI. They must not browse the web dashboard, enumerate or probe other server routes, or inspect the registry's database, filesystem, or internals.
+11. Agents must authenticate only with their own enrolled agent identity. They must never log in as \`admin\` or a human account, never seek shared credentials, and never escalate privileges to merge a change.
+12. Agents may create, edit, and publish project-scoped specs for their own repo, but must only **propose** changes to global and project-type specs. They must never approve or publish a change they proposed; approval is a human action and separation of duties is enforced by the server.
 
 ## Non-Goals
 This spec does not grant an agent permission to access production, secrets, protected branches, or external systems. Host approval and least-privilege rules still apply.

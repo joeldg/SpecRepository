@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import AdmZip from "adm-zip";
 import type { Spec, SpecVersion, VersionDelta } from "@specregistry/shared";
 import { now, uuid } from "../db.js";
@@ -54,6 +54,26 @@ function projectFromQuery(
 }
 
 export async function specRoutes(app: FastifyInstance): Promise<void> {
+  // Agent-role tokens may only create/edit/publish project-scoped specs bound to
+  // their own enrolled repo. Humans (author+) and anonymous dev access are
+  // unrestricted here; governed (global / project-type) specs require human review.
+  function assertAgentScope(req: FastifyRequest, projectId: string | null, action: string): void {
+    const user = req.user;
+    if (!user || user.role !== "agent") return;
+    if (!projectId) {
+      throw new HttpError(
+        403,
+        `Agents may only ${action} project-scoped specs for their own repo. Global and project-type specs require a human-reviewed change (use the review workflow); do not self-publish governed specs.`
+      );
+    }
+    const consumer = app.db.prepare("SELECT repo FROM repo_consumers WHERE id = ?").get(projectId) as
+      | { repo: string }
+      | undefined;
+    if (!consumer || (user.repo ?? "").toLowerCase() !== consumer.repo.toLowerCase()) {
+      throw new HttpError(403, `This agent is enrolled for ${user.repo ?? "(none)"} and cannot ${action} another project's specs.`);
+    }
+  }
+
   // List all global and project-type specs (summaries, no markdown body).
   app.get("/specs", async (req) => {
     const { project_type_id, project_id } = req.query as { project_type_id?: string; project_id?: string };
@@ -159,6 +179,8 @@ export async function specRoutes(app: FastifyInstance): Promise<void> {
     const pt = findProjectType(app.db, projectTypeId);
     if (!pt) throw new HttpError(404, `Unknown project type: ${projectTypeId}`);
     const project = projectId ? requireProjectConsumer(app.db, projectId, pt.id) : undefined;
+    assertAgentScope(req, project?.id ?? null, "create");
+    const author = req.user?.role === "agent" ? req.user.username : updatedBy;
     const duplicate = project
       ? app.db.prepare("SELECT id FROM specs WHERE project_id = ? AND filename = ?").get(project.id, filename)
       : app.db.prepare("SELECT id FROM specs WHERE project_type_id = ? AND project_id IS NULL AND filename = ?").get(pt.id, filename);
@@ -177,7 +199,7 @@ export async function specRoutes(app: FastifyInstance): Promise<void> {
         `INSERT INTO specs (id, project_type_id, project_id, filename, current_version, status, content, updated_by, audit_prompt, created_at, updated_at)
          VALUES (?, ?, ?, ?, '0.1.0', 'draft', ?, ?, ?, ?, ?)`
       )
-      .run(id, pt.id, project?.id ?? null, filename, content, updatedBy, auditPrompt, ts, ts);
+      .run(id, pt.id, project?.id ?? null, filename, content, author, auditPrompt, ts, ts);
     reply.code(201);
     return requireSpec(app.db, id);
   });
@@ -189,9 +211,10 @@ export async function specRoutes(app: FastifyInstance): Promise<void> {
     if (spec.status !== "draft") {
       throw new HttpError(409, "Published specs change via the review workflow (POST /specs/review)");
     }
+    assertAgentScope(req, spec.project_id, "edit");
     const body = (req.body ?? {}) as Record<string, unknown>;
     const content = requireString(body, "content");
-    const updatedBy = requireString(body, "updated_by");
+    const updatedBy = req.user?.role === "agent" ? req.user.username : requireString(body, "updated_by");
     app.db
       .prepare("UPDATE specs SET content = ?, updated_by = ?, updated_at = ? WHERE id = ?")
       .run(content, updatedBy, now(), spec.id);
@@ -203,8 +226,9 @@ export async function specRoutes(app: FastifyInstance): Promise<void> {
     const { key } = req.params as { key: string };
     const spec = requireSpec(app.db, key);
     if (spec.status !== "draft") throw new HttpError(409, `Spec is not a draft (status: ${spec.status})`);
+    assertAgentScope(req, spec.project_id, "publish");
     const body = (req.body ?? {}) as Record<string, unknown>;
-    const publishedBy = requireString(body, "published_by");
+    const publishedBy = req.user?.role === "agent" ? req.user.username : requireString(body, "published_by");
     const ts = now();
     const version = "1.0.0";
     const publish = app.db.transaction(() => {

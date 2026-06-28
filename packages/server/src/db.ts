@@ -232,6 +232,8 @@ CREATE TABLE IF NOT EXISTS users (
   role TEXT NOT NULL DEFAULT 'author' CHECK (role IN ('admin', 'reviewer', 'author', 'agent')),
   password_hash TEXT,
   source TEXT NOT NULL DEFAULT 'local' CHECK (source IN ('local', 'ldap')),
+  repo TEXT,
+  project_type_id TEXT,
   created_at TEXT NOT NULL
 );
 
@@ -485,6 +487,15 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
         PRIMARY KEY (report_id, entity_id, spec_filename)
       );
       CREATE INDEX IF NOT EXISTS idx_code_trace_links_report ON code_trace_links(report_id);
+    `,
+  },
+  {
+    // Bind self-enrolled agent identities to a repo + project type so they can
+    // self-publish project-scoped specs for their own repo only.
+    version: 18,
+    sql: `
+      ALTER TABLE users ADD COLUMN repo TEXT;
+      ALTER TABLE users ADD COLUMN project_type_id TEXT;
     `,
   },
 ];

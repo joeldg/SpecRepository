@@ -10,6 +10,7 @@ import { runCompile, COMPILE_TARGETS, type CompileTarget } from "./compile.js";
 import { runVerify } from "./verify.js";
 import { runAudit } from "./audit.js";
 import { runStyleguideList, runStyleguideAdd } from "./styleguides.js";
+import { readStoredCredentials } from "./credentials.js";
 import { writeCodeInventory } from "./codeMetadata.js";
 import { reportCodeTrace, type Manifest } from "./repo.js";
 import { runTraceCheck, traceKinds, traceThreshold } from "./traceCheck.js";
@@ -95,7 +96,10 @@ const server =
   (typeof flags.server === "string" ? flags.server : undefined) ??
   process.env.SPECREG_SERVER ??
   "http://localhost:4000";
-const token = typeof flags.token === "string" ? flags.token : process.env.SPECREG_TOKEN;
+const token =
+  (typeof flags.token === "string" ? flags.token : undefined) ??
+  process.env.SPECREG_TOKEN ??
+  readStoredCredentials()?.token;
 
 function manifestProjectType(dir: string): string | undefined {
   const manifestPath = path.resolve(process.cwd(), dir, ".specregistry.json");
