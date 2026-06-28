@@ -1,10 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline/promises";
-import { GOOGLE_STYLE_GUIDES, styleGuidesForLanguages, type StyleGuideEntry } from "@specregistry/shared";
+import { GOOGLE_STYLE_GUIDES, styleGuidesForLanguages, type StyleGuideEntry } from "./styleguideCatalog.js";
 import { scanDirectory } from "./scan.js";
 
-export { GOOGLE_STYLE_GUIDES } from "@specregistry/shared";
+export { GOOGLE_STYLE_GUIDES } from "./styleguideCatalog.js";
 
 const ALL_LANGUAGES = [...new Set(GOOGLE_STYLE_GUIDES.flatMap((g) => g.languages))];
 
