@@ -9,7 +9,7 @@ import { auditCodebase, runEfficacy, type AuditInput } from "../lib/audit.js";
 import { createChangeRequest } from "../lib/changes.js";
 import { uuid as makeId } from "../db.js";
 import { dispatchWebhooks, recordUsage } from "../lib/events.js";
-import { searchSpecsByMode, type SearchMode } from "../lib/search.js";
+import { searchSpecsByMode, type SearchMode, type SearchResult } from "../lib/search.js";
 import { evaluateCompliance } from "../lib/compliance.js";
 import { splitSections } from "../lib/sections.js";
 import { bundleSpecs } from "../lib/compile.js";
@@ -23,6 +23,52 @@ function feedbackClusterKey(row: Pick<AgentFeedback, "spec_id" | "error_type" | 
     .slice(0, 10)
     .join(" ");
   return `${row.spec_id}:${row.error_type}:${normalized}`;
+}
+
+const GUIDANCE_TOPIC_ALIASES: Array<{ triggers: string[]; query: string }> = [
+  {
+    triggers: ["agent", "operating", "requirement", "requirements", "mcp", "governance", "review"],
+    query: "agents mcp get_specs report_spec_feedback",
+  },
+  {
+    triggers: ["governance", "review", "approval", "publish", "change", "policy"],
+    query: "spec governance review approval publish workflow",
+  },
+  {
+    triggers: ["sdd", "process", "workflow", "operating", "model"],
+    query: "sdd operating model governed repository feedback review",
+  },
+  {
+    triggers: ["traceability", "observability", "compliance", "coverage", "drift"],
+    query: "traceability observability compliance coverage drift",
+  },
+];
+
+function normalizedWords(value: string): Set<string> {
+  return new Set(
+    value
+      .toLowerCase()
+      .split(/[^a-z0-9_]+/)
+      .filter(Boolean)
+  );
+}
+
+function guidanceAliasQueries(topic: string): string[] {
+  const words = normalizedWords(topic);
+  return GUIDANCE_TOPIC_ALIASES.filter((alias) => {
+    const matches = alias.triggers.filter((trigger) => words.has(trigger)).length;
+    return matches >= 2 || (words.has("agent") && (words.has("governance") || words.has("review") || words.has("mcp")));
+  }).map((alias) => alias.query);
+}
+
+function dedupeSearchResults(rows: SearchResult[]): SearchResult[] {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const key = `${row.spec_id}:${row.section_anchor}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export async function feedbackRoutes(app: FastifyInstance): Promise<void> {
@@ -170,6 +216,16 @@ export async function feedbackRoutes(app: FastifyInstance): Promise<void> {
     // Governed specs relevant to the topic and/or languages (FTS: no embedding dependency).
     const query = [topic, ...languages].filter(Boolean).join(" ");
     const specs = query ? await searchSpecsByMode(app.db, query, "fts", pt?.id, 8, project?.id) : [];
+    const aliasSpecs = topic
+      ? (
+          await Promise.all(
+            guidanceAliasQueries(topic).map((aliasQuery) =>
+              searchSpecsByMode(app.db, aliasQuery, "fts", pt?.id, 4, project?.id)
+            )
+          )
+        ).flat()
+      : [];
+    const resolvedSpecs = dedupeSearchResults([...specs, ...aliasSpecs]).slice(0, 8);
 
     // Styleguides available to pull, one entry per requested language.
     const perLanguage = languages.map((language) => {
@@ -201,7 +257,7 @@ export async function feedbackRoutes(app: FastifyInstance): Promise<void> {
         });
       }
     }
-    if (topic && specs.length === 0) {
+    if (topic && resolvedSpecs.length === 0) {
       gaps.push({
         kind: "spec",
         subject: topic,
@@ -212,7 +268,7 @@ export async function feedbackRoutes(app: FastifyInstance): Promise<void> {
 
     const recommended_actions: string[] = [];
     for (const sg of styleguides) recommended_actions.push(`Pull the ${sg.title}: \`${sg.pull_command}\``);
-    if (specs.length > 0) recommended_actions.push("Load the matched governed specs before writing code.");
+    if (resolvedSpecs.length > 0) recommended_actions.push("Load the matched governed specs before writing code.");
     if (gaps.length > 0) recommended_actions.push("Report uncovered languages/domains via report_spec_feedback instead of guessing.");
 
     return {
@@ -220,7 +276,7 @@ export async function feedbackRoutes(app: FastifyInstance): Promise<void> {
       project: project?.repo ?? null,
       languages: perLanguage,
       styleguides,
-      specs,
+      specs: resolvedSpecs,
       covered: gaps.length === 0,
       gaps,
       recommended_actions,

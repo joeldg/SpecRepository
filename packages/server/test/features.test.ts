@@ -1358,6 +1358,18 @@ describe("resolve-guidance (on-demand styleguide/spec acquisition)", () => {
     expect(body.covered).toBe(true);
   });
 
+  it("resolves agent governance review topics to the baseline agent operating spec", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/ai/resolve-guidance",
+      payload: { project_type: "Acme Edge Device", topic: "agent operating requirements and governance review" },
+    });
+    const body = res.json();
+    expect(body.covered).toBe(true);
+    expect(body.gaps).toEqual([]);
+    expect(body.specs.some((s: any) => s.filename === "AGENT_OPERATING_RULES.md")).toBe(true);
+  });
+
   it("reports a spec gap for an uncovered topic", async () => {
     const res = await app.inject({
       method: "POST",
