@@ -129,6 +129,12 @@ export default function SettingsPage() {
   const [skillDescription, setSkillDescription] = useState("");
   const [skillInstructions, setSkillInstructions] = useState("");
   const [skillRisk, setSkillRisk] = useState<AgentSkillRow["risk_level"]>("safe");
+  const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
+  const [editSkillName, setEditSkillName] = useState("");
+  const [editSkillDescription, setEditSkillDescription] = useState("");
+  const [editSkillInstructions, setEditSkillInstructions] = useState("");
+  const [editSkillRisk, setEditSkillRisk] = useState<AgentSkillRow["risk_level"]>("safe");
+  const [editSkillStatus, setEditSkillStatus] = useState<AgentSkillRow["status"]>("active");
 
   const reload = useCallback(() => {
     Promise.all([
@@ -266,6 +272,24 @@ export default function SettingsPage() {
         </div>
       </div>
     );
+  }
+
+  function startSkillEdit(skill: AgentSkillRow) {
+    setEditingSkillId(skill.id);
+    setEditSkillName(skill.name);
+    setEditSkillDescription(skill.description);
+    setEditSkillInstructions(skill.instructions);
+    setEditSkillRisk(skill.risk_level);
+    setEditSkillStatus(skill.status);
+  }
+
+  function cancelSkillEdit() {
+    setEditingSkillId(null);
+    setEditSkillName("");
+    setEditSkillDescription("");
+    setEditSkillInstructions("");
+    setEditSkillRisk("safe");
+    setEditSkillStatus("active");
   }
 
   return (
@@ -1287,20 +1311,84 @@ export default function SettingsPage() {
             <tr><th>Skill</th><th>Risk</th><th>Status</th><th>Purpose</th><th></th></tr>
           </thead>
           <tbody>
-            {agentSkills.map((skill) => (
-              <tr key={skill.id}>
-                <td><strong>{skill.name}</strong><div className="mono faint">{skill.slug}{skill.built_in ? " · built in" : ""}</div></td>
-                <td><StatusBadge status={skill.risk_level === "safe" ? "approved" : "pending"} /> {skill.risk_level}</td>
-                <td>{skill.status}</td>
-                <td className="dim">{skill.description}</td>
-                <td>
-                  <button onClick={() => act(() => api.updateAgentSkill(skill.id, { status: skill.status === "active" ? "disabled" : "active" }))}>
-                    {skill.status === "active" ? "Disable" : "Enable"}
-                  </button>{" "}
-                  {!skill.built_in && <button className="danger" onClick={() => act(() => api.deleteAgentSkill(skill.id))}>Delete</button>}
-                </td>
-              </tr>
-            ))}
+            {agentSkills.map((skill) => {
+              const editing = editingSkillId === skill.id;
+              return (
+                <tr key={skill.id}>
+                  {editing ? (
+                    <td colSpan={5}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        <div className="form-row">
+                          <input
+                            type="text"
+                            value={editSkillName}
+                            onChange={(e) => setEditSkillName(e.target.value)}
+                            style={{ minWidth: 220 }}
+                          />
+                          <input type="text" value={skill.slug} readOnly className="mono" title="Skill slugs are stable identifiers and are not changed during edits." />
+                          <select value={editSkillRisk} onChange={(e) => setEditSkillRisk(e.target.value as AgentSkillRow["risk_level"])}>
+                            <option value="safe">Safe procedure</option>
+                            <option value="restricted">Restricted procedure</option>
+                          </select>
+                          <select value={editSkillStatus} onChange={(e) => setEditSkillStatus(e.target.value as AgentSkillRow["status"])}>
+                            <option value="active">Active</option>
+                            <option value="disabled">Disabled</option>
+                          </select>
+                        </div>
+                        <div className="form-row">
+                          <input
+                            type="text"
+                            value={editSkillDescription}
+                            onChange={(e) => setEditSkillDescription(e.target.value)}
+                            style={{ flex: 1 }}
+                          />
+                        </div>
+                        <textarea
+                          value={editSkillInstructions}
+                          onChange={(e) => setEditSkillInstructions(e.target.value)}
+                          style={{ width: "100%", minHeight: 150 }}
+                        />
+                        <div className="toolbar" style={{ marginBottom: 0 }}>
+                          <button
+                            className="primary"
+                            disabled={!editSkillName.trim() || !editSkillDescription.trim() || !editSkillInstructions.trim()}
+                            onClick={() =>
+                              act(async () => {
+                                await api.updateAgentSkill(skill.id, {
+                                  name: editSkillName.trim(),
+                                  description: editSkillDescription.trim(),
+                                  instructions: editSkillInstructions.trim(),
+                                  risk_level: editSkillRisk,
+                                  status: editSkillStatus,
+                                });
+                                cancelSkillEdit();
+                              })
+                            }
+                          >
+                            Save skill
+                          </button>
+                          <button onClick={cancelSkillEdit}>Cancel</button>
+                        </div>
+                      </div>
+                    </td>
+                  ) : (
+                    <>
+                      <td><strong>{skill.name}</strong><div className="mono faint">{skill.slug}{skill.built_in ? " · built in" : ""}</div></td>
+                      <td><StatusBadge status={skill.risk_level === "safe" ? "approved" : "pending"} /> {skill.risk_level}</td>
+                      <td>{skill.status}</td>
+                      <td className="dim">{skill.description}</td>
+                      <td>
+                        <button onClick={() => startSkillEdit(skill)}>Edit</button>{" "}
+                        <button onClick={() => act(() => api.updateAgentSkill(skill.id, { status: skill.status === "active" ? "disabled" : "active" }))}>
+                          {skill.status === "active" ? "Disable" : "Enable"}
+                        </button>{" "}
+                        {!skill.built_in && <button className="danger" onClick={() => act(() => api.deleteAgentSkill(skill.id))}>Delete</button>}
+                      </td>
+                    </>
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

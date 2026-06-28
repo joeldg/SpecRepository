@@ -98,6 +98,31 @@ describe("governed agent skills", () => {
     });
     expect(disabled.statusCode).toBe(200);
     expect(disabled.json().status).toBe("disabled");
+    const edited = await app.inject({
+      method: "PUT",
+      url: `/api/v1/skills/${created.json().id}`,
+      payload: {
+        name: "Prepare release",
+        description: "Prepare a reviewed release and rollback plan.",
+        instructions: "Build the release checklist, rollback plan, and stop before deployment.",
+        risk_level: "safe",
+        status: "active",
+      },
+    });
+    expect(edited.statusCode).toBe(200);
+    expect(edited.json()).toMatchObject({
+      slug: "prepare-deployment",
+      name: "Prepare release",
+      description: "Prepare a reviewed release and rollback plan.",
+      instructions: "Build the release checklist, rollback plan, and stop before deployment.",
+      risk_level: "safe",
+      status: "active",
+    });
+    await app.inject({
+      method: "PUT",
+      url: `/api/v1/skills/${created.json().id}`,
+      payload: { status: "disabled" },
+    });
     expect((await getJson("/api/v1/skills")).some((skill: any) => skill.id === created.json().id)).toBe(false);
     expect((await getJson("/api/v1/skills?include_disabled=true")).find((skill: any) => skill.id === created.json().id).status).toBe("disabled");
 
