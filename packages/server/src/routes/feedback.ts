@@ -10,6 +10,7 @@ import { createChangeRequest } from "../lib/changes.js";
 import { uuid as makeId } from "../db.js";
 import { dispatchWebhooks, recordUsage } from "../lib/events.js";
 import { searchSpecsByMode, type SearchMode } from "../lib/search.js";
+import { evaluateCompliance } from "../lib/compliance.js";
 import { splitSections } from "../lib/sections.js";
 import { bundleSpecs } from "../lib/compile.js";
 
@@ -99,6 +100,31 @@ export async function feedbackRoutes(app: FastifyInstance): Promise<void> {
     );
     reply.code(201);
     return app.db.prepare("SELECT * FROM agent_feedback WHERE id = ?").get(id);
+  });
+
+  // Compliance verification loop. Agents call this before declaring a task done.
+  // The gate is objective (measured coverage/drift/unmapped vs the project-type
+  // policy); the agent's self-assessed score is recorded and over-claims flagged.
+  // Returns a directive that loops the agent until it actually passes.
+  app.post("/ai/compliance-check", async (req) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const pt = requireProjectType(app.db, requireString(body, "project_type"));
+    const project =
+      typeof body.project_id === "string"
+        ? findProjectConsumer(app.db, body.project_id, pt.id)
+        : typeof body.repo === "string"
+          ? findProjectConsumer(app.db, body.repo, pt.id)
+          : undefined;
+    const trace = body.trace && typeof body.trace === "object" ? (body.trace as Record<string, unknown>) : undefined;
+    const selfAssessedScore = typeof body.self_assessed_score === "number" ? body.self_assessed_score : null;
+    recordUsage(app.db, "sync_check", pt.id, "compliance-check");
+    return evaluateCompliance(app.db, {
+      pt,
+      consumerId: project?.id,
+      repo: project?.repo ?? (typeof body.repo === "string" ? body.repo : undefined),
+      trace,
+      selfAssessedScore,
+    });
   });
 
   // RAG endpoint: section-level FTS, semantic, or hybrid search over published specs.

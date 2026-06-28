@@ -285,6 +285,18 @@ You may freely create, edit, and publish **project-scoped** specs for this repo 
 specs via the review workflow, but you **cannot approve or publish** them — approval is a human
 action performed outside your tools. Never attempt to approve your own changes. Submit, then stop
 and let a human review; do not try to escalate privileges to get something merged.
+
+## Verifying Completion
+
+Before you report a task as done, run the compliance gate and keep working until it passes:
+
+- Call \`check_compliance\` (MCP) or run \`specreg comply\` (regenerates the trace, checks, and
+  exits non-zero when not compliant). Pass your honest self-assessed score.
+- The registry decides compliance **objectively** (traceability coverage, drift, unmapped
+  entities against this project's policy). Claiming "100%" yourself is not enough — over-claims
+  are flagged. If the verdict is NOT COMPLIANT, address the listed outstanding items
+  (e.g. add inline \`// @spec[FILE#section]\` annotations, link unmapped routes/schemas) and
+  re-run the check. Loop until it reports compliant; only then report the task complete.
 ${styleGuides.length > 0 ? `
 ## External Style Guides
 

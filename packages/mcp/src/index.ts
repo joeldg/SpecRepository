@@ -128,6 +128,32 @@ server.tool(
 );
 
 server.tool(
+  "check_compliance",
+  "Call this BEFORE declaring a task complete. It returns an objective compliance verdict for this repo (traceability coverage, drift, and unmapped entities vs the project's policy) plus a directive. If it is NOT compliant, keep working on the outstanding items and call it again — do not report the task done until it returns compliant. Run `specreg code-map --report` first (or use `specreg comply`) so the verdict reflects your latest code. Pass your honest self_assessed_score; over-claims are flagged.",
+  {
+    self_assessed_score: z.number().optional().describe("Your honest 0-100 estimate of how fully the work satisfies the specs."),
+    project_type: z.string().optional().describe("Project type name. Defaults to the repo's configured type."),
+    repo: z.string().optional().describe("Repo/project identity. Defaults to SPECREG_REPO when set."),
+    project_id: z.string().optional().describe("Explicit SpecRegistry project id."),
+  },
+  async ({ self_assessed_score, project_type, repo, project_id }) => {
+    const type = project_type ?? DEFAULT_TYPE;
+    return text(
+      await api("/api/v1/ai/compliance-check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          self_assessed_score,
+          project_type: type,
+          project_id,
+          repo: project_id ? undefined : (repo ?? DEFAULT_REPO),
+        }),
+      })
+    );
+  }
+);
+
+server.tool(
   "report_spec_feedback",
   "Report an ambiguity, contradiction, or outdated guidance you found in a specification while executing a task. This flags the spec for human review — use it instead of guessing.",
   {

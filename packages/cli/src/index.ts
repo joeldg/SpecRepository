@@ -11,6 +11,7 @@ import { runVerify } from "./verify.js";
 import { runAudit } from "./audit.js";
 import { runStyleguideList, runStyleguideAdd } from "./styleguides.js";
 import { readStoredCredentials } from "./credentials.js";
+import { runComply } from "./comply.js";
 import { writeCodeInventory } from "./codeMetadata.js";
 import { reportCodeTrace, type Manifest } from "./repo.js";
 import { runTraceCheck, traceKinds, traceThreshold } from "./traceCheck.js";
@@ -27,6 +28,7 @@ Usage:
   specreg verify    Verify local spec hashes + the registry's ed25519 bundle signature
   specreg audit     Ask the configured server LLM whether this codebase violates its governed specs
   specreg styleguide list|add  List the styleguide catalog, or pull one by id/language on demand
+  specreg comply    Verify spec compliance (coverage/drift) before declaring work done; exit 1 if not
   specreg code-map  Generate a sidecar AST/code metadata inventory with stable code IDs
   specreg trace-check  Enforce .spec/code-trace.json coverage/drift thresholds in CI
 
@@ -57,6 +59,7 @@ Options:
   --write           generate: use configured CLI LLM provider to write generated specs
   --force           Overwrite protected/generated files where supported
   --ci              audit: exit 1 when findings exist
+  --score <n>       comply: your honest 0-100 self-assessed compliance score
   -h, --help        Show this help
 `;
 
@@ -218,6 +221,15 @@ try {
       dir: typeof flags.dir === "string" ? flags.dir : "specs",
       ci: flags.ci === true,
     });
+  } else if (command === "comply") {
+    const specsDir = typeof flags.dir === "string" ? flags.dir : "specs";
+    const projectType = (typeof flags.type === "string" ? flags.type : undefined) ?? manifestProjectType(specsDir);
+    if (!projectType) throw new Error("comply requires --type or a local specs/.specregistry.json manifest with project_type.");
+    const score = typeof flags.score === "string" ? Number(flags.score) : undefined;
+    if (score !== undefined && (Number.isNaN(score) || score < 0 || score > 100)) {
+      throw new Error("--score must be a number between 0 and 100");
+    }
+    await runComply({ server, token, type: projectType, dir: specsDir, score });
   } else if (command === "styleguide") {
     const sub = positionals[1];
     const styleguideDir = typeof flags["styleguide-dir"] === "string" ? flags["styleguide-dir"] : ".spec/styleguides";

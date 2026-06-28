@@ -35,6 +35,7 @@ import {
   type EmbeddingConfig,
 } from "../lib/embeddings.js";
 import { getFeatureConfig, saveFeatureConfig, type FeatureConfig } from "../lib/features.js";
+import { DEFAULT_COMPLIANCE_POLICY, getCompliancePolicy } from "../lib/compliance.js";
 
 function isLlmTier(value: unknown): value is LlmTier {
   return typeof value === "string" && LLM_TIER_VALUES.includes(value as LlmTier);
@@ -591,6 +592,71 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       .all(staleCutoff);
 
     return { window_days: 30, events: byType, top_project_types: topTypes, stale_specs: stale };
+  });
+
+  // --- Compliance policies (per-project-type thresholds for the verification loop) ---
+
+  app.get("/compliance-policies", async () => {
+    const rows = app.db
+      .prepare(
+        `SELECT cp.*, pt.name AS project_type_name
+         FROM compliance_policies cp
+         LEFT JOIN project_types pt ON pt.id = cp.project_type_id
+         ORDER BY cp.project_type_id IS NULL DESC, pt.name`
+      )
+      .all();
+    return { default: DEFAULT_COMPLIANCE_POLICY, policies: rows };
+  });
+
+  app.put("/compliance-policies", async (req) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const pt = body.project_type ? requireProjectType(app.db, requireString(body, "project_type")) : undefined;
+    const minCoverage = typeof body.min_coverage === "number" ? body.min_coverage : DEFAULT_COMPLIANCE_POLICY.min_coverage;
+    const maxDrift = typeof body.max_drift === "number" ? body.max_drift : DEFAULT_COMPLIANCE_POLICY.max_drift;
+    const kinds = Array.isArray(body.required_mapped_kinds)
+      ? (body.required_mapped_kinds as unknown[]).filter((k): k is string => typeof k === "string")
+      : DEFAULT_COMPLIANCE_POLICY.required_mapped_kinds;
+    if (minCoverage < 0 || minCoverage > 1 || maxDrift < 0 || maxDrift > 1) {
+      throw new HttpError(400, "min_coverage and max_drift must be between 0 and 1");
+    }
+    const ts = now();
+    const existing = app.db
+      .prepare("SELECT id FROM compliance_policies WHERE project_type_id IS ?")
+      .get(pt?.id ?? null) as { id: string } | undefined;
+    if (existing) {
+      app.db
+        .prepare("UPDATE compliance_policies SET min_coverage = ?, max_drift = ?, required_mapped_kinds = ?, updated_at = ? WHERE id = ?")
+        .run(minCoverage, maxDrift, JSON.stringify(kinds), ts, existing.id);
+    } else {
+      app.db
+        .prepare(
+          `INSERT INTO compliance_policies (id, project_type_id, min_coverage, max_drift, required_mapped_kinds, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(uuid(), pt?.id ?? null, minCoverage, maxDrift, JSON.stringify(kinds), ts, ts);
+    }
+    recordAudit(app.db, {
+      actor: actorFrom(req, "admin"),
+      action: "compliance_policy.updated",
+      target_type: "compliance_policy",
+      target_id: pt?.id ?? "default",
+      summary: `Compliance policy set for ${pt?.name ?? "default"}: coverage>=${minCoverage}, drift<=${maxDrift}`,
+      detail: { project_type: pt?.name ?? null, min_coverage: minCoverage, max_drift: maxDrift, required_mapped_kinds: kinds },
+    });
+    return getCompliancePolicy(app.db, pt?.id ?? null);
+  });
+
+  // The compliance attempt log — the self-healing loop trail (newest first).
+  app.get("/compliance-attestations", async (req) => {
+    const { repo } = req.query as { repo?: string };
+    const base = `
+      SELECT ca.*, pt.name AS project_type_name
+      FROM compliance_attestations ca
+      LEFT JOIN project_types pt ON pt.id = ca.project_type_id
+    `;
+    return repo
+      ? app.db.prepare(`${base} WHERE ca.repo = ? ORDER BY ca.created_at DESC LIMIT 200`).all(repo)
+      : app.db.prepare(`${base} ORDER BY ca.created_at DESC LIMIT 200`).all();
   });
 
   app.get("/reports/overview", async () => {

@@ -1354,3 +1354,85 @@ describe("resolve-guidance (on-demand styleguide/spec acquisition)", () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+describe("compliance verification loop", () => {
+  const compliantTrace = {
+    schema_version: 1,
+    coverage: { governed_entity_count: 10, linked_entity_count: 10, unlinked_entity_count: 0, coverage_ratio: 1, unlinked_by_kind: {} },
+    drift: { score: 0, severity: "none" },
+  };
+  const failingTrace = {
+    schema_version: 1,
+    coverage: { governed_entity_count: 16, linked_entity_count: 3, unlinked_entity_count: 13, coverage_ratio: 0.19, unlinked_by_kind: { route: 2, schema: 1, function: 10 } },
+    drift: { score: 0.81, severity: "high" },
+  };
+
+  it("passes when coverage/drift meet the policy", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/ai/compliance-check",
+      payload: { project_type: "Acme Edge Device", repo: "github.com/acme/ok", trace: compliantTrace, self_assessed_score: 100 },
+    });
+    expect(res.statusCode).toBe(200);
+    const v = res.json();
+    expect(v.compliant).toBe(true);
+    expect(v.outstanding).toEqual([]);
+    expect(v.directive).toMatch(/COMPLIANT/);
+  });
+
+  it("fails with concrete outstanding items and a keep-working directive", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/ai/compliance-check",
+      payload: { project_type: "Acme Edge Device", repo: "github.com/acme/bad", trace: failingTrace, self_assessed_score: 100 },
+    });
+    const v = res.json();
+    expect(v.compliant).toBe(false);
+    expect(v.over_claimed).toBe(true); // self 100 vs low objective
+    const checks = v.outstanding.map((o: any) => o.check).sort();
+    expect(checks).toEqual(["coverage", "drift", "mapping", "mapping"].sort());
+    expect(v.directive).toMatch(/NOT COMPLIANT/);
+    expect(v.directive).toMatch(/self-assessed 100/);
+  });
+
+  it("flags missing trace data", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/ai/compliance-check",
+      payload: { project_type: "Acme Edge Device", repo: "github.com/acme/notrace" },
+    });
+    const v = res.json();
+    expect(v.compliant).toBe(false);
+    expect(v.outstanding[0].check).toBe("trace");
+    expect(v.objective_score).toBe(0);
+  });
+
+  it("records attestations and increments the iteration counter", async () => {
+    const repo = "github.com/acme/loop";
+    await app.inject({ method: "POST", url: "/api/v1/ai/compliance-check", payload: { project_type: "Acme Edge Device", repo, trace: failingTrace } });
+    const second = await app.inject({ method: "POST", url: "/api/v1/ai/compliance-check", payload: { project_type: "Acme Edge Device", repo, trace: compliantTrace } });
+    expect(second.json().iteration).toBe(2);
+    const log = await getJson(`/api/v1/compliance-attestations?repo=${encodeURIComponent(repo)}`);
+    expect(log.length).toBe(2);
+  });
+
+  it("honors an admin-tightened per-project-type policy", async () => {
+    await app.inject({
+      method: "PUT",
+      url: "/api/v1/compliance-policies",
+      payload: { project_type: "Acme Edge Device", min_coverage: 1.0, max_drift: 0, required_mapped_kinds: ["route", "schema"] },
+    });
+    // coverage_ratio 1 but drift 0 trace passes; a 0.95-coverage trace now fails
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/ai/compliance-check",
+      payload: {
+        project_type: "Acme Edge Device",
+        repo: "github.com/acme/strict",
+        trace: { schema_version: 1, coverage: { coverage_ratio: 0.95, unlinked_by_kind: {} }, drift: { score: 0, severity: "none" } },
+      },
+    });
+    expect(res.json().compliant).toBe(false);
+    expect(res.json().outstanding.some((o: any) => o.check === "coverage")).toBe(true);
+  });
+});

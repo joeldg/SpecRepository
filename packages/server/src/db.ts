@@ -287,6 +287,32 @@ CREATE TABLE IF NOT EXISTS agent_skills (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS compliance_policies (
+  id TEXT PRIMARY KEY,
+  project_type_id TEXT UNIQUE,
+  min_coverage REAL NOT NULL DEFAULT 0.8,
+  max_drift REAL NOT NULL DEFAULT 0.2,
+  required_mapped_kinds TEXT NOT NULL DEFAULT '["route","schema"]',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS compliance_attestations (
+  id TEXT PRIMARY KEY,
+  project_type_id TEXT,
+  consumer_id TEXT,
+  repo TEXT,
+  self_assessed_score INTEGER,
+  objective_score INTEGER NOT NULL,
+  compliant INTEGER NOT NULL,
+  coverage_ratio REAL,
+  drift_score REAL,
+  outstanding TEXT NOT NULL DEFAULT '[]',
+  iteration INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_compliance_attestations_repo ON compliance_attestations(repo, created_at);
 `;
 
 /** Versioned migrations for databases created before the current schema. Each runs once. */
@@ -496,6 +522,36 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
     sql: `
       ALTER TABLE users ADD COLUMN repo TEXT;
       ALTER TABLE users ADD COLUMN project_type_id TEXT;
+    `,
+  },
+  {
+    // Compliance verification loop: per-project-type thresholds + attestation log.
+    version: 19,
+    sql: `
+      CREATE TABLE IF NOT EXISTS compliance_policies (
+        id TEXT PRIMARY KEY,
+        project_type_id TEXT UNIQUE,
+        min_coverage REAL NOT NULL DEFAULT 0.8,
+        max_drift REAL NOT NULL DEFAULT 0.2,
+        required_mapped_kinds TEXT NOT NULL DEFAULT '["route","schema"]',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS compliance_attestations (
+        id TEXT PRIMARY KEY,
+        project_type_id TEXT,
+        consumer_id TEXT,
+        repo TEXT,
+        self_assessed_score INTEGER,
+        objective_score INTEGER NOT NULL,
+        compliant INTEGER NOT NULL,
+        coverage_ratio REAL,
+        drift_score REAL,
+        outstanding TEXT NOT NULL DEFAULT '[]',
+        iteration INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_compliance_attestations_repo ON compliance_attestations(repo, created_at);
     `,
   },
 ];
