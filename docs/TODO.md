@@ -60,6 +60,23 @@
   `.spec/`, `.mcp.json`) in consuming repos and document it, so demo/init output is not
   accidentally committed.
 
+## Compliance Verification
+
+- [x] Compliance verification loop: objective gate (`POST /ai/compliance-check`) on measured
+  traceability coverage/drift/unmapped vs per-project-type policy, with recorded self-assessed
+  score + over-claim flagging; `check_compliance` MCP tool, `specreg comply` (non-zero exit),
+  attestation log, and an `AGENT_OPERATING_RULES` rule to loop until compliant.
+- [x] Compliance dashboard panel: web UI view over `/api/v1/compliance-attestations` so humans
+  can watch the self-healing loop per repo (iteration count, objective vs self-assessed score,
+  latest outstanding items).
+- [ ] Per-project-type compliance policy editor on the Settings page (`GET/PUT
+  /api/v1/compliance-policies`): set min coverage / max drift / required-mapped kinds from the
+  UI instead of the API only.
+- [ ] De-duplicate the styleguide catalog: it is now mirrored in `packages/shared` (used by the
+  server's resolve-guidance) and `packages/cli/src/styleguideCatalog.ts` (used by `styleguide
+  add`, vendored so the published CLI has no `@specregistry/shared` runtime dep). Add a comment
+  marking the mirror and a test asserting the two stay identical so they cannot drift.
+
 ## Developer Workflow
 
 - [x] Comprehensive guided new-project setup in `specreg init`, with custom stack choices,
