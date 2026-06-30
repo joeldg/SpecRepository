@@ -78,6 +78,24 @@ export function findUser(db: Db, username: string): User | undefined {
     | undefined;
 }
 
+/**
+ * Boot guard for secured deployments: when auth is required, refuse to run while
+ * the `admin` account still uses the well-known default password. Throws with an
+ * actionable message; the server entrypoint turns this into a fatal exit. No-op in
+ * dev mode (auth optional), so the zero-config local experience is unaffected.
+ */
+export function assertSecurePosture(db: Db, opts: { authRequired: boolean }): void {
+  if (!opts.authRequired) return;
+  const admin = findUser(db, "admin");
+  if (admin?.password_hash && verifyPassword("admin", admin.password_hash)) {
+    throw new Error(
+      'SPECREG_AUTH=required, but the "admin" account still uses the default password "admin". ' +
+        "Set SPECREG_ADMIN_PASSWORD before the first run (a fresh database then auto-generates a strong one), " +
+        "or rotate the admin password, then restart."
+    );
+  }
+}
+
 export function createUser(
   db: Db,
   input: {

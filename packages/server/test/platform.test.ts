@@ -5,6 +5,7 @@ import AdmZip from "adm-zip";
 import { buildApp } from "../src/app.js";
 import { createDb } from "../src/db.js";
 import { seed, SPECREGISTRY_OPERATING_BASELINE_FILENAMES } from "../src/seed.js";
+import { assertSecurePosture, findUser, verifyPassword } from "../src/lib/auth.js";
 import { buildAdminTestApp } from "./helpers.js";
 
 let app: FastifyInstance;
@@ -23,6 +24,8 @@ afterEach(async () => {
   delete process.env.LDAP_URL;
   delete process.env.LDAP_DEFAULT_ROLE;
   delete process.env.SPECREG_PUBLIC_URL;
+  delete process.env.SPECREG_AUTH;
+  delete process.env.SPECREG_ADMIN_PASSWORD;
 });
 
 async function getJson(target: FastifyInstance, url: string) {
@@ -835,5 +838,38 @@ describe("agent identity, scope, and separation of duties", () => {
     } finally {
       delete process.env.SPECREG_ALLOW_ADMIN_SELF_APPROVE;
     }
+  });
+});
+
+describe("secured posture", () => {
+  it("refuses to run with the default admin password when auth is required", () => {
+    delete process.env.SPECREG_AUTH; // seed with dev default so admin password is "admin"
+    delete process.env.SPECREG_ADMIN_PASSWORD;
+    const db = createDb(":memory:");
+    seed(db);
+    expect(() => assertSecurePosture(db, { authRequired: true })).toThrow(/default password/i);
+    // Dev mode tolerates it.
+    expect(() => assertSecurePosture(db, { authRequired: false })).not.toThrow();
+  });
+
+  it("passes the guard when SPECREG_ADMIN_PASSWORD is set", () => {
+    process.env.SPECREG_ADMIN_PASSWORD = "a-strong-passphrase";
+    const db = createDb(":memory:");
+    seed(db);
+    expect(() => assertSecurePosture(db, { authRequired: true })).not.toThrow();
+    const admin = findUser(db, "admin");
+    expect(verifyPassword("a-strong-passphrase", admin!.password_hash!)).toBe(true);
+    expect(verifyPassword("admin", admin!.password_hash!)).toBe(false);
+  });
+
+  it("auto-generates a non-default admin password in secured fresh-seed", () => {
+    process.env.SPECREG_AUTH = "required";
+    delete process.env.SPECREG_ADMIN_PASSWORD;
+    const db = createDb(":memory:");
+    seed(db);
+    const admin = findUser(db, "admin");
+    expect(admin).toBeTruthy();
+    expect(verifyPassword("admin", admin!.password_hash!)).toBe(false);
+    expect(() => assertSecurePosture(db, { authRequired: true })).not.toThrow();
   });
 });

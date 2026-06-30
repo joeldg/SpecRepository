@@ -43,6 +43,11 @@
   (`begin_task`, `get_specs`, `search_specs`, `finish_task`, `report_spec_feedback`),
   and the `specreg` CLI — no dashboard browsing, endpoint probing, or server-internals
   inspection.
+- [x] Enforced secured posture: with `SPECREG_AUTH=required` the server refuses to boot while
+  `admin` uses the default password (also catches `SPECREG_ADMIN_PASSWORD=admin`), and a fresh
+  secured database auto-generates a strong admin password printed once. Converts the agent
+  MCP/API boundary, RBAC, and separation of duties from advisory to server-enforced; agents
+  authenticate with their enrolled `agent`-scoped token and cannot approve/publish/admin.
 - [ ] Governed tool permission profiles by project/spec/task, covering allowed file edits,
   shell/network/dependency/database actions, destructive commands, LLM usage, and
   escalation expectations for the host agent.
@@ -105,6 +110,24 @@
 - [x] Scope agent-session listing: the agent-tier `GET /ai/agent-sessions` now requires a `repo`
   (no cross-repo enumeration of task text/plans/models); the global cross-repo view moved to the
   admin-gated `GET /api/v1/agent-sessions`.
+
+## Validation & Dogfooding
+
+The system is feature-rich but lightly battle-tested; every real signal so far has come from
+actually running it, not from the backlog. Before adding more horizontal features, exercise the
+whole loop end-to-end on a real project and let the friction re-rank everything below.
+
+- [ ] **Dogfood: build a real small app end-to-end in secured mode.** Stand up the server with
+  `SPECREG_AUTH=required` + a real admin password, run `specreg init` in a fresh repo (agent
+  enrolls its own scoped token), let an agent do `begin_task` → write code → pull guidance via
+  `resolve_guidance` → `specreg comply`/`finish_task` loop → submit a change → human approves in
+  the UI. Capture every point of friction, 401, confusing message, or governance gap as a
+  finding. Expected to surface the next round of real work (as the game experiment did:
+  auth hole, self-approval, compliance-loop need).
+- [ ] Operability pass uncovered while dogfooding: CI `npm rebuild better-sqlite3` (native ABI
+  mismatch across Node versions broke the suite once), bound the code-trace ingest payload, and
+  encrypt-at-rest the LDAP bind password and webhook/Slack secrets currently stored plaintext in
+  settings.
 
 ## Developer Workflow
 

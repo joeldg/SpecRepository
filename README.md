@@ -937,9 +937,20 @@ GET  /metrics
 Auth is **off by default** (anonymous access, free-text author names) for the zero-config
 dev experience. Set `SPECREG_AUTH=required` to require a Bearer token / `x-api-key` on every
 non-public route. A local `admin` account is seeded (password from `SPECREG_ADMIN_PASSWORD`,
-default `admin`). Roles: `admin` > `reviewer` > `author` > `agent`; approvals need `reviewer`,
-settings need `admin`. Per-project-type required reviewers restrict who can approve; approval
-policies can also require N recorded approvals before a change publishes.
+default `admin` in dev). Roles: `admin` > `reviewer` > `author` > `agent`; approvals need
+`reviewer`, settings need `admin`. Per-project-type required reviewers restrict who can approve;
+approval policies can also require N recorded approvals before a change publishes.
+
+#### Secured deployments (recommended for any real/shared use)
+
+Run with `SPECREG_AUTH=required`. In this mode the server **refuses to boot while the `admin`
+account still uses the default password `admin`** — set `SPECREG_ADMIN_PASSWORD` to your own, or
+on a fresh database leave it unset and SpecRegistry generates a strong password and prints it
+once at first start. This closes the "agent escalates to `admin`/`admin` and self-approves" path:
+agents authenticate with their own enrolled `agent`-scoped token (issued by `specreg init` into
+`.spec/credentials.json`), which can submit drafts and project-scoped specs but cannot approve,
+publish, or reach admin routes. Combined with separation of duties (you cannot approve a change
+you proposed), the governance is enforced server-side, not merely advised.
 
 Set `LDAP_URL` to authenticate against a directory instead (direct-bind via
 `LDAP_BIND_DN_TEMPLATE`, or service-account search via `LDAP_SEARCH_BASE`/`LDAP_SEARCH_FILTER`);

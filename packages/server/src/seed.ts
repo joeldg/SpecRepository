@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import type { Db } from "./db.js";
 import { now, uuid } from "./db.js";
 import { createUser } from "./lib/auth.js";
@@ -586,12 +587,29 @@ _List the main entry points and configuration files._
 function seedAdmin(db: Db): void {
   const existing = db.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number };
   if (existing.n > 0) return;
-  createUser(db, {
-    username: "admin",
-    role: "admin",
-    password: process.env.SPECREG_ADMIN_PASSWORD ?? "admin",
-    display_name: "Administrator",
-  });
+  const secured = process.env.SPECREG_AUTH === "required";
+  let password = process.env.SPECREG_ADMIN_PASSWORD;
+  let generated = false;
+  if (!password) {
+    // In secured mode never seed the well-known default; generate a strong one
+    // and surface it once so the operator can capture it.
+    if (secured) {
+      password = crypto.randomBytes(12).toString("base64url");
+      generated = true;
+    } else {
+      password = "admin";
+    }
+  }
+  createUser(db, { username: "admin", role: "admin", password, display_name: "Administrator" });
+  if (generated) {
+    console.log(
+      "\n================ SpecRegistry secured mode ================\n" +
+        "Generated an initial admin password (shown once — save it now):\n\n" +
+        `    ${password}\n\n` +
+        "Pin your own with SPECREG_ADMIN_PASSWORD, or rotate it after first login.\n" +
+        "==========================================================\n"
+    );
+  }
 }
 
 /** Seeds the Acme demo configuration. No-op if any project type already exists. */

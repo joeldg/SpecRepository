@@ -5,6 +5,7 @@ import fastifyStatic from "@fastify/static";
 import { buildApp } from "./app.js";
 import { createDb } from "./db.js";
 import { loadServerEnv } from "./env.js";
+import { assertSecurePosture } from "./lib/auth.js";
 import { seed } from "./seed.js";
 
 loadServerEnv();
@@ -16,6 +17,18 @@ const port = Number(process.env.PORT ?? 4000);
 const db = createDb(dbPath);
 if (seed(db)) {
   console.log("Seeded database with Acme demo configuration");
+}
+
+// Secured deployments must not run with the default admin password.
+const authRequired = process.env.SPECREG_AUTH === "required";
+try {
+  assertSecurePosture(db, { authRequired });
+} catch (err) {
+  console.error(`\nFATAL: ${err instanceof Error ? err.message : String(err)}\n`);
+  process.exit(1);
+}
+if (authRequired) {
+  console.log("SpecRegistry running in secured mode (SPECREG_AUTH=required).");
 }
 
 const app = await buildApp(db, { logger: true });
