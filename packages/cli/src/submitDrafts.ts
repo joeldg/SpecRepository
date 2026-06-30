@@ -36,6 +36,7 @@ export async function runSubmitDrafts(opts: SubmitDraftsOptions): Promise<void> 
   const byFilename = new Map(governed.map((spec) => [spec.filename, spec]));
 
   const created: string[] = [];
+  const published: string[] = [];
   const reviews: string[] = [];
   const skipped: string[] = [];
 
@@ -66,6 +67,7 @@ export async function runSubmitDrafts(opts: SubmitDraftsOptions): Promise<void> 
           body: JSON.stringify({ published_by: opts.author }),
         }, opts.token);
         created[created.length - 1] += " (published 1.0.0)";
+        published.push(filename);
       }
       continue;
     }
@@ -111,5 +113,13 @@ export async function runSubmitDrafts(opts: SubmitDraftsOptions): Promise<void> 
   for (const item of reviews) console.log(`  REVIEW:  ${item}`);
   for (const item of skipped) console.log(`  SKIPPED: ${item}`);
   if (created.length === 0 && reviews.length === 0 && skipped.length === 0) console.log("  No drafts processed.");
-  console.log("\nOpen the registry Reviews and Specs pages to finish review, approval, and publication.");
+  if (reviews.length > 0) {
+    console.log("\nOpen the registry Reviews page to finish review, approval, and publication.");
+  } else if (published.length > 0) {
+    console.log("\nPublished newly created project-scoped spec(s). Run `specreg sync` so the local governed bundle includes them.");
+  } else if (created.length > 0) {
+    console.log("\nOpen the registry Specs page to review and publish the created draft spec(s).");
+  } else {
+    console.log("\nNo registry review action is required for this run.");
+  }
 }

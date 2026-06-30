@@ -117,6 +117,36 @@ test("code inventory writes a reviewable sidecar without overwriting unless forc
   assert.equal(forced.trace.coverage.governed_entity_count, first.trace.coverage.governed_entity_count);
 });
 
+test("explicit @spec annotations create high-confidence trace links", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "specreg-code-map-annotation-"));
+  fs.mkdirSync(path.join(root, "src"), { recursive: true });
+  fs.mkdirSync(path.join(root, "specs"), { recursive: true });
+  fs.writeFileSync(path.join(root, "specs", "API.md"), "# API\n\n## Traceability\n\nHandlers are mapped explicitly.\n", "utf8");
+  fs.writeFileSync(
+    path.join(root, "src", "api.ts"),
+    `// @spec[API.md#traceability]
+export function handler() {
+  return { ok: true };
+}
+`,
+    "utf8"
+  );
+
+  const inventory = buildCodeInventory(root);
+  const entity = inventory.entities.find((item) => item.kind === "function" && item.name === "handler")!;
+  assert.deepEqual(entity.metadata?.spec_refs, ["API.md"]);
+  assert.equal(
+    inventory.trace.links.some(
+      (link) =>
+        link.entity_id === entity.id &&
+        link.spec_filename === "API.md" &&
+        link.confidence === 0.99 &&
+        link.reasons.some((reason) => reason.includes("@spec"))
+    ),
+    true
+  );
+});
+
 test("trace check fails low coverage, high drift, and unmapped critical entity kinds", () => {
   const root = makeProject();
   const inventory = buildCodeInventory(root);

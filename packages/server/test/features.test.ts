@@ -484,17 +484,17 @@ describe("templates & lint", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/v1/templates",
-      payload: { filename: "API.md", required_sections: ["Transport", "Resources"] },
+      payload: { filename: "RUNBOOK.md", required_sections: ["Operations", "Rollback"] },
     });
     expect(created.statusCode).toBe(201);
     const dup = await app.inject({
       method: "POST",
       url: "/api/v1/templates",
-      payload: { filename: "api.md", required_sections: [] },
+      payload: { filename: "runbook.md", required_sections: [] },
     });
     expect(dup.statusCode).toBe(409);
     const all = await getJson("/api/v1/templates");
-    expect(all.length).toBe(3); // 2 seeded + API.md
+    expect(all.length).toBe(4); // 3 seeded + RUNBOOK.md
   });
 });
 

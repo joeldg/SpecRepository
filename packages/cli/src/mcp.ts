@@ -224,6 +224,39 @@ export async function runMcpServer(opts: McpServerOptions): Promise<void> {
   );
 
   server.tool(
+    "report_guidance_gap",
+    "Report missing language/domain guidance when resolve_guidance says a topic is uncovered and there is no existing spec_id to attach feedback to.",
+    {
+      topic: z.string().describe("The uncovered language/domain/topic, e.g. 'HTTP route API endpoint behavior'."),
+      description: z.string().describe("What guidance was missing and what decision you needed."),
+      languages: z.array(z.string()).optional().describe("Languages involved in the missing guidance."),
+      context_code_snippet: z.string().optional().describe("Relevant code, task, or spec context."),
+      agent_identifier: z.string().optional().describe("Your model/agent name. Defaults to mcp-agent."),
+      project_type: z.string().optional().describe("Project type name. Defaults to the repo's configured type."),
+      repo: z.string().optional().describe("Repo/project identity. Defaults to SPECREG_REPO when set."),
+      project_id: z.string().optional().describe("Explicit SpecRegistry project id."),
+    },
+    async ({ topic, description, languages, context_code_snippet, agent_identifier, project_type, repo, project_id }) => {
+      const type = project_type ?? defaultType;
+      const created = await api(opts.server, opts.token, "/api/v1/ai/guidance-feedback", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          topic,
+          description,
+          languages: languages ?? [],
+          context_code_snippet,
+          agent_identifier: agent_identifier ?? "mcp-agent",
+          project_type: type,
+          project_id,
+          repo: project_id ? undefined : (repo ?? defaultRepo),
+        }),
+      });
+      return text(created);
+    }
+  );
+
+  server.tool(
     "report_spec_feedback",
     "Report an ambiguity, contradiction, or outdated guidance you found in a specification while executing a task. This flags the spec for human review — use it instead of guessing.",
     {

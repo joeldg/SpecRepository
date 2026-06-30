@@ -91,6 +91,21 @@ CREATE TABLE IF NOT EXISTS agent_feedback (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS guidance_feedback (
+  id TEXT PRIMARY KEY,
+  project_type_id TEXT REFERENCES project_types(id),
+  consumer_id TEXT REFERENCES repo_consumers(id),
+  repo TEXT,
+  topic TEXT NOT NULL,
+  languages TEXT NOT NULL DEFAULT '[]',
+  description TEXT NOT NULL,
+  context_code_snippet TEXT,
+  agent_identifier TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'acknowledged', 'resolved')),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_guidance_feedback_status ON guidance_feedback(status, created_at);
+
 CREATE TABLE IF NOT EXISTS stub_prompts (
   id TEXT PRIMARY KEY,
   target_filename TEXT NOT NULL,
@@ -603,6 +618,27 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
         updated_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_agent_sessions_repo_time ON agent_sessions(repo, started_at);
+    `,
+  },
+  {
+    // First-class feedback for missing language/domain guidance that is not tied
+    // to a specific existing spec.
+    version: 21,
+    sql: `
+      CREATE TABLE IF NOT EXISTS guidance_feedback (
+        id TEXT PRIMARY KEY,
+        project_type_id TEXT REFERENCES project_types(id),
+        consumer_id TEXT REFERENCES repo_consumers(id),
+        repo TEXT,
+        topic TEXT NOT NULL,
+        languages TEXT NOT NULL DEFAULT '[]',
+        description TEXT NOT NULL,
+        context_code_snippet TEXT,
+        agent_identifier TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'acknowledged', 'resolved')),
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_guidance_feedback_status ON guidance_feedback(status, created_at);
     `,
   },
 ];

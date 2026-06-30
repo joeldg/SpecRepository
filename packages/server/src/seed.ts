@@ -102,10 +102,10 @@ Agents should make SpecRegistry usage repeatable and observable. They must load 
 4. In repo-specific work, agents must set or respect \`SPECREG_REPO\` so project-scoped specs can override project-type guidance.
 5. In auth-required deployments, agents must use \`SPECREG_TOKEN\` and never print or commit it.
 6. Agents must cite relevant spec filenames and sections in summaries when a change is materially governed by those specs.
-7. Agents must call \`report_spec_feedback\` or the feedback API for ambiguity, contradiction, outdated guidance, or missing requirements.
+7. Agents must call \`report_spec_feedback\` or the feedback API for ambiguity, contradiction, or outdated guidance in an existing spec, and \`report_guidance_gap\` or the guidance feedback API when no existing spec covers the language/domain/topic.
 8. Agents must distinguish approved specs from drafts, examples, local style guides, and generated prompts.
 9. Agents must not claim checks passed unless they actually ran and observed the result.
-10. Agents must reach the registry only through the MCP server, the documented agent API (\`begin_task\`, \`get_specs\`, \`search_specs\`, \`resolve_guidance\`, \`finish_task\`, \`report_spec_feedback\`), and the \`specreg\` CLI. They must not browse the web dashboard, enumerate or probe other server routes, or inspect the registry's database, filesystem, or internals.
+10. Agents must reach the registry only through the MCP server, the documented agent API (\`begin_task\`, \`get_specs\`, \`search_specs\`, \`resolve_guidance\`, \`finish_task\`, \`report_spec_feedback\`, \`report_guidance_gap\`), and the \`specreg\` CLI. They must not browse the web dashboard, enumerate or probe other server routes, or inspect the registry's database, filesystem, or internals.
 11. Agents must authenticate only with their own enrolled agent identity. They must never log in as \`admin\` or a human account, never seek shared credentials, and never escalate privileges to merge a change.
 12. Agents may create, edit, and publish project-scoped specs for their own repo, but must only **propose** changes to global and project-type specs. They must never approve or publish a change they proposed; approval is a human action and separation of duties is enforced by the server.
 13. Before declaring a task complete, agents must call \`finish_task\` with their \`begin_task\` session id, or run \`specreg comply\` for CLI/CI workflows, and continue working until objective compliance passes. \`check_compliance\` remains available for direct compliance checks. A self-assessment of "done" is not sufficient; the registry's objective coverage/drift gate decides. Agents must not claim completion while the check still reports outstanding items.
@@ -492,6 +492,40 @@ function seedDefaultProjectTypes(db: Db): number {
   return inserted;
 }
 
+function seedWebAppApiSpec(db: Db, projectTypeId?: string): boolean {
+  const webId =
+    projectTypeId ??
+    (db.prepare("SELECT id FROM project_types WHERE name = ? COLLATE NOCASE").get("Web App Standard") as
+      | { id: string }
+      | undefined)?.id;
+  if (!webId) return false;
+  return insertPublishedSpecIfMissing(db, webId, {
+    filename: "API.md",
+    content: `# Web App Standard — API Specification
+
+## Scope
+This specification governs REST or JSON API endpoints in Web App Standard projects.
+
+## Endpoints
+Every endpoint spec must list method, path, purpose, authentication requirements, request shape,
+response shape, and compatibility expectations. Health/readiness endpoints must return stable JSON
+and documented status codes.
+
+## Request and Response Contracts
+Request validation belongs at the API boundary. Response payloads must be stable, typed or
+schema-described, and covered by tests. Breaking response or path changes require a major spec delta.
+
+## Errors
+Unknown routes must return a documented 404 shape. Validation and authorization failures must use
+consistent JSON error payloads and must not leak secrets or internal stack traces.
+
+## Traceability
+Route declarations, API handlers, response helpers, and package commands that serve the API should
+map to the governing project or project-type API spec.
+`,
+  });
+}
+
 function insertPublishedSpec(db: Db, projectTypeId: string, spec: SeedSpec): void {
   const id = uuid();
   const ts = now();
@@ -534,10 +568,8 @@ function seedOperatingBaseline(db: Db, globalId?: string): number {
 
 /** Default conformance templates; seeded independently so existing databases pick them up. */
 function seedTemplates(db: Db): void {
-  const existing = db.prepare("SELECT COUNT(*) AS n FROM spec_templates").get() as { n: number };
-  if (existing.n > 0) return;
   const insert = db.prepare(
-    `INSERT INTO spec_templates (id, filename, required_sections, content_template, description, created_at, updated_at)
+    `INSERT OR IGNORE INTO spec_templates (id, filename, required_sections, content_template, description, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   );
   const ts = now();
@@ -578,6 +610,38 @@ _Describe how data moves through the system._
 _List the main entry points and configuration files._
 `,
     "Every STRUCTURE.md must map directories and list entry points.",
+    ts,
+    ts
+  );
+  insert.run(
+    uuid(),
+    "API.md",
+    JSON.stringify(["Scope", "Endpoints", "Request and Response Contracts", "Errors", "Traceability"]),
+    `# <Project> — API Specification
+
+## Scope
+
+_Describe the API surface governed by this spec._
+
+## Endpoints
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| \`GET\` | \`/health\` | _health/readiness response_ |
+
+## Request and Response Contracts
+
+_Define payloads, status codes, content types, and compatibility expectations._
+
+## Errors
+
+_Define standard error shapes and status code behavior._
+
+## Traceability
+
+_Name the handlers, route declarations, commands, and helpers that should map back to this spec._
+`,
+    "Every API.md should document endpoints, payload contracts, errors, and traceability surfaces.",
     ts,
     ts
   );
@@ -635,6 +699,7 @@ export function seed(db: Db): boolean {
   const existing = db.prepare("SELECT COUNT(*) AS n FROM project_types").get() as { n: number };
   if (existing.n > 0) {
     seedDefaultProjectTypes(db);
+    seedWebAppApiSpec(db);
     seedOperatingBaseline(db);
     return false;
   }
@@ -822,6 +887,7 @@ All mutations go through the API layer; the frontend never writes to storage dir
 - \`src/web/main.tsx\` — frontend entry
 `,
   });
+  seedWebAppApiSpec(db, webId);
 
   seedDefaultProjectTypes(db);
 

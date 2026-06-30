@@ -199,6 +199,11 @@ function makeId(input: Omit<AddEntityInput, "body" | "metadata">): string {
 
 function addEntity(entities: CodeEntity[], input: AddEntityInput): CodeEntity {
   const id = makeId(input);
+  const specRefs = extractSpecRefs(input.body);
+  const metadata = {
+    ...(input.metadata ?? {}),
+    ...(specRefs.length > 0 ? { spec_refs: specRefs } : {}),
+  };
   const entity: CodeEntity = {
     id,
     kind: input.kind,
@@ -211,10 +216,15 @@ function addEntity(entities: CodeEntity[], input: AddEntityInput): CodeEntity {
     end_line: input.endLine,
     hash: digest(input.body, 24),
     ...(input.parentId ? { parent_id: input.parentId } : {}),
-    ...(input.metadata ? { metadata: input.metadata } : {}),
+    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
   };
   entities.push(entity);
   return entity;
+}
+
+function extractSpecRefs(value: string): string[] {
+  const refs = [...value.matchAll(/@spec\[\s*([^\]\s]+)\s*\]/gi)].map((match) => match[1].split("#")[0].trim());
+  return [...new Set(refs)];
 }
 
 function sourceSnippetByLine(content: string, startLine: number, endLine: number): string {
@@ -281,7 +291,7 @@ function extractTypeScript(root: string, file: string, content: string, entities
       startLine: loc.line,
       startColumn: loc.column,
       endLine: nodeEndLine(source, node),
-      body: node.getText(source),
+      body: node.getFullText(source),
       parentId: parentId ?? fileEntity.id,
       metadata,
     });
@@ -300,7 +310,7 @@ function extractTypeScript(root: string, file: string, content: string, entities
         startLine: loc.line,
         startColumn: loc.column,
         endLine: nodeEndLine(source, node),
-        body: node.getText(source),
+        body: node.getFullText(source),
         parentId: fileEntity.id,
         metadata: { module: moduleSpecifier },
       });
@@ -315,7 +325,7 @@ function extractTypeScript(root: string, file: string, content: string, entities
         startLine: loc.line,
         startColumn: loc.column,
         endLine: nodeEndLine(source, node),
-        body: node.getText(source),
+        body: node.getFullText(source),
         parentId: fileEntity.id,
         metadata: { module: node.moduleSpecifier.text, export: true },
       });
@@ -352,7 +362,7 @@ function extractTypeScript(root: string, file: string, content: string, entities
           startLine: loc.line,
           startColumn: loc.column,
           endLine: nodeEndLine(source, node),
-          body: node.getText(source),
+          body: node.getFullText(source),
           parentId: fileEntity.id,
           metadata: {
             method,
@@ -638,8 +648,24 @@ function governable(entity: CodeEntity): boolean {
 
 function linkEntitiesToSpecs(entities: CodeEntity[], specs: SpecReference[]): TraceabilityLink[] {
   const links: TraceabilityLink[] = [];
+  const linkedKeys = new Set<string>();
   for (const entity of entities.filter(governable)) {
     const haystacks = specs.map((spec) => ({ spec, text: `${spec.filename}\n${spec.title}\n${spec.sections.join("\n")}\n${spec.content}`.toLowerCase() }));
+    const explicitRefs = Array.isArray(entity.metadata?.spec_refs) ? entity.metadata.spec_refs : [];
+    for (const ref of explicitRefs) {
+      const spec = specs.find((candidate) => candidate.filename.toLowerCase() === ref.toLowerCase());
+      if (!spec) continue;
+      const key = `${entity.id}:${spec.filename}`;
+      linkedKeys.add(key);
+      links.push({
+        entity_id: entity.id,
+        entity_name: entity.name,
+        entity_kind: entity.kind,
+        spec_filename: spec.filename,
+        confidence: 0.99,
+        reasons: [`explicit @spec annotation: ${ref}`],
+      });
+    }
     const probes = [
       entity.name,
       entity.signature,
@@ -653,6 +679,9 @@ function linkEntitiesToSpecs(entities: CodeEntity[], specs: SpecReference[]): Tr
       const directName = entity.name.length >= 3 && text.includes(entity.name.toLowerCase());
       const directRoute = typeof entity.metadata?.route_path === "string" && text.includes(entity.metadata.route_path.toLowerCase());
       if (!directName && !directRoute && matched.length < 2) continue;
+      const key = `${entity.id}:${spec.filename}`;
+      if (linkedKeys.has(key)) continue;
+      linkedKeys.add(key);
       const confidence = Math.min(0.95, 0.35 + matched.length * 0.12 + (directName ? 0.2 : 0) + (directRoute ? 0.25 : 0));
       links.push({
         entity_id: entity.id,

@@ -157,6 +157,49 @@ export async function feedbackRoutes(app: FastifyInstance): Promise<void> {
     return app.db.prepare("SELECT * FROM agent_feedback WHERE id = ?").get(id);
   });
 
+  // First-class gap reporting when resolve_guidance finds a missing language or
+  // domain and there is no existing spec_id to attach ordinary feedback to.
+  app.post("/ai/guidance-feedback", async (req, reply) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const topic = requireString(body, "topic");
+    const description = requireString(body, "description");
+    const pt = body.project_type ? requireProjectType(app.db, requireString(body, "project_type")) : undefined;
+    const project = pt
+      ? typeof body.project_id === "string"
+        ? findProjectConsumer(app.db, body.project_id, pt.id)
+        : typeof body.repo === "string"
+          ? findProjectConsumer(app.db, body.repo, pt.id)
+          : undefined
+      : undefined;
+    const id = uuid();
+    app.db
+      .prepare(
+        `INSERT INTO guidance_feedback
+          (id, project_type_id, consumer_id, repo, topic, languages, description, context_code_snippet, agent_identifier, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)`
+      )
+      .run(
+        id,
+        pt?.id ?? null,
+        project?.id ?? null,
+        project?.repo ?? optionalString(body, "repo") ?? null,
+        topic,
+        JSON.stringify(stringList(body.languages)),
+        description,
+        optionalString(body, "context_code_snippet") ?? null,
+        optionalString(body, "agent_identifier") ?? "mcp-agent",
+        now()
+      );
+    await dispatchWebhooks(app.db, "feedback.created", `Missing guidance reported: ${topic}`, {
+      guidance_feedback_id: id,
+      project_type: pt?.name ?? null,
+      topic,
+    });
+    reply.code(201);
+    const row = app.db.prepare("SELECT * FROM guidance_feedback WHERE id = ?").get(id) as Record<string, unknown>;
+    return { ...row, languages: JSON.parse(String(row.languages)) };
+  });
+
   // Agent lifecycle preflight. Agents call this when starting non-trivial work so
   // the registry records the task, active repo, model, loaded spec bundle, and
   // concrete next controls before edits begin.
@@ -467,7 +510,7 @@ export async function feedbackRoutes(app: FastifyInstance): Promise<void> {
           kind: "styleguide",
           subject: l.language,
           detail: `No styleguide is available for ${l.language} in the registry catalog.`,
-          recommended_action: `Report the gap with report_spec_feedback (or ask an admin to add a styleguide/spec for ${l.language}). Do not invent the standard.`,
+          recommended_action: `Report the gap with report_guidance_gap (or ask an admin to add a styleguide/spec for ${l.language}). Do not invent the standard.`,
         });
       }
     }
@@ -476,14 +519,14 @@ export async function feedbackRoutes(app: FastifyInstance): Promise<void> {
         kind: "spec",
         subject: topic,
         detail: `No governed spec covers "${topic}" for this project.`,
-        recommended_action: `Report the gap with report_spec_feedback, then draft one with \`specreg generate\` and submit it through review.`,
+        recommended_action: `Report the gap with report_guidance_gap, then draft one with \`specreg generate\` and submit it through review.`,
       });
     }
 
     const recommended_actions: string[] = [];
     for (const sg of styleguides) recommended_actions.push(`Pull the ${sg.title}: \`${sg.pull_command}\``);
     if (resolvedSpecs.length > 0) recommended_actions.push("Load the matched governed specs before writing code.");
-    if (gaps.length > 0) recommended_actions.push("Report uncovered languages/domains via report_spec_feedback instead of guessing.");
+    if (gaps.length > 0) recommended_actions.push("Report uncovered languages/domains via report_guidance_gap instead of guessing.");
 
     return {
       project_type: pt?.name ?? null,

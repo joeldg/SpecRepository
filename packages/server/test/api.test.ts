@@ -44,7 +44,7 @@ describe("project types & specs", () => {
 
   it("lists all specs as summaries with counts", async () => {
     const specs = await getJson("/api/v1/specs");
-    expect(specs.length).toBe(9 + SPECREGISTRY_OPERATING_BASELINE_FILENAMES.length);
+    expect(specs.length).toBe(10 + SPECREGISTRY_OPERATING_BASELINE_FILENAMES.length);
     expect(specs[0]).not.toHaveProperty("content");
     expect(specs[0]).toHaveProperty("open_feedback_count");
   });
@@ -73,8 +73,8 @@ describe("project types & specs", () => {
       url: "/api/v1/specs",
       payload: {
         project_type_id: webType.id,
-        filename: "API.md",
-        content: "# Web API Standard\nDraft.",
+        filename: "FEATURE.md",
+        content: "# Web Feature Standard\nDraft.",
         updated_by: "joel",
       },
     });
@@ -86,7 +86,7 @@ describe("project types & specs", () => {
     const edited = await app.inject({
       method: "PUT",
       url: `/api/v1/specs/${spec.id}`,
-      payload: { content: "# Web API Standard\nv1 ready.", updated_by: "joel" },
+      payload: { content: "# Web Feature Standard\nv1 ready.", updated_by: "joel" },
     });
     expect(edited.statusCode).toBe(200);
 
@@ -307,6 +307,27 @@ describe("AI feedback loop", () => {
       payload: { spec_id: specs[0].id, agent_identifier: "a", error_type: "vibes", description: "d" },
     });
     expect(bad.statusCode).toBe(400);
+  });
+
+  it("records missing guidance feedback without requiring a spec id", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/ai/guidance-feedback",
+      payload: {
+        project_type: "Web App Standard",
+        repo: "github.com/acme/web",
+        topic: "payment webhook replay behavior",
+        languages: ["TypeScript"],
+        agent_identifier: "mcp-agent",
+        description: "No governed spec explained replay protection for payment webhooks.",
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toMatchObject({
+      topic: "payment webhook replay behavior",
+      languages: ["TypeScript"],
+      status: "open",
+    });
   });
 
   it("serves published specs (global + type) to agents", async () => {

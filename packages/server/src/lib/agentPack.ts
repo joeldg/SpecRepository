@@ -46,7 +46,7 @@ Do not edit code, configuration, tests, or generated artifacts until the pre-imp
 3. Call \`get_specs\` for the project type and repo, using the \`begin_task\` response as the preflight session record.
 4. Load relevant governed procedures from \`.spec/skills/*/SKILL.md\` when present before performing that workflow.
 5. Use \`search_specs\` with \`mode: "hybrid"\`, the project type, and repo when you need focused guidance from a large spec set.
-6. If specs are ambiguous, contradictory, outdated, or missing intent, call \`report_spec_feedback\` with the affected \`spec_id\`, issue type, description, and relevant code or spec context.
+6. If specs are ambiguous, contradictory, outdated, or missing intent, call \`report_spec_feedback\` with the affected \`spec_id\`, issue type, description, and relevant code or spec context. If no existing spec covers the area, call \`report_guidance_gap\`.
 7. Do not silently ignore a governed requirement. Either follow it or report feedback.
 8. If MCP is unavailable, use only the documented agent API fallback, record that MCP was unavailable, and do not browse/probe registry routes.
 9. Before reporting completion, call \`finish_task\` with the \`session_id\` from \`begin_task\`; keep working until the objective verdict passes. Use \`check_compliance\` or \`specreg comply\` for direct compliance checks and CI gates.
@@ -61,6 +61,7 @@ Do not edit code, configuration, tests, or generated artifacts until the pre-imp
 - \`resolve_guidance\`: check whether a language/domain is covered before inventing a local standard.
 - \`check_compliance\`: record and evaluate the objective compliance loop for the repo.
 - \`report_spec_feedback\`: file ambiguity, contradiction, or outdated-guidance feedback for review.
+- \`report_guidance_gap\`: file missing language/domain guidance when no existing spec applies.
 - \`get_audit_prompt\`: fetch reverse-conformance prompts for checking implementation against spec intent.
 `;
 }

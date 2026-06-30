@@ -249,7 +249,7 @@ Before editing code, configuration, tests, docs, or generated artifacts:
 5. Call MCP \`get_specs\` for project type \`${projectType}\` and repo \`${repo}\`.
 6. Load relevant governed procedures from \`${skillDir}/\` before performing their workflow.
 7. Use MCP \`search_specs\` and \`resolve_guidance\` before guessing missing standards.
-8. Report unclear, contradictory, outdated, or missing-intent specs with \`report_spec_feedback\`.
+8. Report unclear, contradictory, outdated, or missing-intent specs with \`report_spec_feedback\`; report uncovered topics with \`report_guidance_gap\`.
 9. Before claiming completion, call MCP \`finish_task\` with the \`session_id\` from \`begin_task\` or run \`specreg comply\`. Use MCP \`check_compliance\` for direct compliance checks.
 
 Local governance files:
@@ -331,8 +331,9 @@ Do not:
 - enumerate, probe, or fuzz server endpoints beyond the documented agent API;
 - inspect the registry's database, filesystem, logs, or internal/admin routes.
 
-If something you need is missing or unclear, call \`report_spec_feedback\` instead of exploring
-the server. Treating the registry as a general-purpose host to investigate is out of scope.
+If something you need is missing or unclear, call \`report_guidance_gap\` or
+\`report_spec_feedback\` instead of exploring the server. Treating the registry as a
+general-purpose host to investigate is out of scope.
 
 ## Identity & Approvals
 
@@ -397,7 +398,7 @@ Required MCP flow:
    (e.g. a new language, or networking/auth/database work), call \`resolve_guidance\`
    with the language(s) and/or topic. It returns the governed specs that apply and the
    styleguides you can pull, or an explicit gap.
-5. Report ambiguity, contradiction, or outdated guidance with \`report_spec_feedback\`.
+5. Report ambiguity, contradiction, or outdated guidance with \`report_spec_feedback\`; report missing language/domain coverage with \`report_guidance_gap\`.
 6. Call \`finish_task\` with the \`session_id\` returned by \`begin_task\` before claiming completion.
 7. Use \`specreg check\` to verify this repo is still using current approved spec versions.
 
@@ -409,7 +410,7 @@ or styleguides, **acquire the proper guidance instead of inventing a standard**:
 - Run \`resolve_guidance\` (MCP) to see what applies and what is missing.
 - Pull a missing language styleguide on demand: \`specreg styleguide add <id|language>\`
   (e.g. \`specreg styleguide add go\`). \`specreg styleguide list\` shows the catalog.
-- If no spec or styleguide covers the area, call \`report_spec_feedback\` and (if appropriate)
+- If no spec or styleguide covers the area, call \`report_guidance_gap\` and (if appropriate)
   draft one with \`specreg generate\` for review. Do not guess the missing rule.
 
 If the MCP server is unavailable, the same data is available over the documented agent API —
@@ -421,6 +422,7 @@ and only these endpoints:
 - \`POST ${server}/api/v1/ai/agent-sessions/begin\` — register preflight and get a session id.
 - \`POST ${server}/api/v1/ai/agent-sessions/finish\` — record completion evidence and run the completion gate.
 - \`POST ${server}/api/v1/ai/feedback\` — report a spec problem.
+- \`POST ${server}/api/v1/ai/guidance-feedback\` — report missing language/domain guidance.
 
 Use the \`specreg\` CLI for everything else (\`check\`, \`sync\`, \`compile\`, \`verify\`,
 \`styleguide add\`). Do not call other server routes directly.
