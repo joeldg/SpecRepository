@@ -10,6 +10,11 @@ that humans can review, developers can sync, and agents can load before they tou
 
 ![SpecRegistry Dashboard](docs/pictures/dashboard.jpeg)
 
+> [!NOTE]
+> Read the core philosophy behind SpecRegistry in the Medium article: [AI Coding Agents Need a Control Plane, Not Better Prompts](https://medium.com/@joeldg/ai-coding-agents-need-a-control-plane-not-better-prompts-bfaa8bb06951).
+> 
+> *"When an agent can generate a multi-file implementation from a Markdown design document, the spec becomes the real source of intent. The code is an artifact. The spec is the control surface."*
+
 The full product specification lives in [docs/SPEC.md](docs/SPEC.md). The operating model
 for Spec Driven Development, observability, and token economics lives in
 [docs/SDD_TOKENOMICS.md](docs/SDD_TOKENOMICS.md).
