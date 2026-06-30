@@ -48,6 +48,81 @@ function text(value: unknown) {
 const server = new McpServer({ name: "specregistry", version: "0.1.0" });
 
 server.tool(
+  "begin_task",
+  "Call this BEFORE non-trivial implementation work. It registers the agent session, records the task/model/repo, returns the governed spec bundle for this project, and tells you whether preflight is ready or blocked. Use the returned session_id when calling finish_task.",
+  {
+    task: z.string().describe("The concrete task you are about to perform."),
+    plan: z.string().optional().describe("Short implementation and verification plan mapped to the specs when known."),
+    model: z.string().optional().describe("Model or agent runtime being used."),
+    branch: z.string().optional().describe("Current git branch, if known."),
+    specs_loaded: z.array(z.string()).optional().describe("Spec filenames or ids already loaded by the agent."),
+    agent_identifier: z.string().optional().describe("Your model/agent name. Defaults to mcp-agent."),
+    project_type: z.string().optional().describe("Project type name. Defaults to the repo's configured type."),
+    repo: z.string().optional().describe("Repo/project identity. Defaults to SPECREG_REPO when set."),
+    project_id: z.string().optional().describe("Explicit SpecRegistry project id."),
+  },
+  async ({ task, plan, model, branch, specs_loaded, agent_identifier, project_type, repo, project_id }) => {
+    const type = project_type ?? DEFAULT_TYPE;
+    if (!type) throw new Error("No project_type given and SPECREG_PROJECT_TYPE is not set");
+    return text(
+      await api("/api/v1/ai/agent-sessions/begin", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          task,
+          plan,
+          model,
+          branch,
+          specs_loaded: specs_loaded ?? [],
+          agent_identifier,
+          project_type: type,
+          project_id,
+          repo: project_id ? undefined : (repo ?? DEFAULT_REPO),
+          mcp_server: SERVER,
+        }),
+      })
+    );
+  }
+);
+
+server.tool(
+  "finish_task",
+  "Call this instead of directly claiming done. It records completion evidence, runs the objective compliance gate, updates the agent session, and blocks completion until compliance passes.",
+  {
+    session_id: z.string().optional().describe("Session id returned by begin_task."),
+    summary: z.string().optional().describe("What changed and why it satisfies the specs."),
+    tests: z.array(z.string()).optional().describe("Verification commands or checks actually run."),
+    changed_files: z.array(z.string()).optional().describe("Files changed by the task."),
+    self_assessed_score: z.number().optional().describe("Your honest 0-100 estimate of how fully the work satisfies the specs."),
+    trace: z.record(z.unknown()).optional().describe("Optional inline code-map trace; otherwise the registry uses the latest uploaded report."),
+    project_type: z.string().optional().describe("Project type name. Required when session_id is omitted; defaults to configured type."),
+    repo: z.string().optional().describe("Repo/project identity. Defaults to SPECREG_REPO when set."),
+    project_id: z.string().optional().describe("Explicit SpecRegistry project id."),
+  },
+  async ({ session_id, summary, tests, changed_files, self_assessed_score, trace, project_type, repo, project_id }) => {
+    const type = project_type ?? DEFAULT_TYPE;
+    if (!session_id && !type) throw new Error("No session_id or project_type given and SPECREG_PROJECT_TYPE is not set");
+    return text(
+      await api("/api/v1/ai/agent-sessions/finish", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          session_id,
+          summary,
+          tests: tests ?? [],
+          changed_files: changed_files ?? [],
+          self_assessed_score,
+          trace,
+          project_type: type,
+          project_id,
+          repo: project_id ? undefined : (repo ?? DEFAULT_REPO),
+        }),
+      })
+    );
+  }
+);
+
+server.tool(
   "list_project_types",
   "List the project types (organization hierarchy) configured in the spec registry.",
   {},

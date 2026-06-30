@@ -250,11 +250,12 @@ Before editing code, configuration, tests, docs, or generated artifacts:
 1. Read \`SPECREGISTRY.md\` for the repository governance workflow.
 2. Use the \`specregistry\` MCP server from \`.mcp.json\`; it runs \`specreg mcp\`.
 3. Run \`specreg check\` and stop if governed specs are stale, missing, or locally modified.
-4. Call MCP \`get_specs\` for project type \`${projectType}\` and repo \`${repo}\`.
-5. Load relevant governed procedures from \`${skillDir}/\` before performing their workflow.
-6. Use MCP \`search_specs\` and \`resolve_guidance\` before guessing missing standards.
-7. Report unclear, contradictory, outdated, or missing-intent specs with \`report_spec_feedback\`.
-8. Before claiming completion, call MCP \`check_compliance\` or run \`specreg comply\`.
+4. Call MCP \`begin_task\` for the task, project type \`${projectType}\`, and repo \`${repo}\`.
+5. Call MCP \`get_specs\` for project type \`${projectType}\` and repo \`${repo}\`.
+6. Load relevant governed procedures from \`${skillDir}/\` before performing their workflow.
+7. Use MCP \`search_specs\` and \`resolve_guidance\` before guessing missing standards.
+8. Report unclear, contradictory, outdated, or missing-intent specs with \`report_spec_feedback\`.
+9. Before claiming completion, call MCP \`finish_task\` with the \`session_id\` from \`begin_task\` or run \`specreg comply\`. Use MCP \`check_compliance\` for direct compliance checks.
 
 Local governance files:
 
@@ -318,9 +319,10 @@ Do not edit code, configuration, tests, or generated artifacts until all of thes
 
 1. Run \`specreg check\` and stop on drift, missing specs, or tampered governed files.
 2. Start the \`specregistry\` MCP server from \`.mcp.json\`; it should run \`specreg mcp\`.
-3. Call \`get_specs\` for project type \`${projectType}\` and repo \`${repo}\`.
-4. Load every relevant governed skill from \`${skillDir}/\` before performing that workflow.
-5. If MCP is unavailable, use only the documented fallback API endpoints in this file,
+3. Call \`begin_task\` for the concrete task, project type \`${projectType}\`, and repo \`${repo}\`.
+4. Call \`get_specs\` for project type \`${projectType}\` and repo \`${repo}\`.
+5. Load every relevant governed skill from \`${skillDir}/\` before performing that workflow.
+6. If MCP is unavailable, use only the documented fallback API endpoints in this file,
    record that MCP was unavailable, and do not browse or probe the registry server.
 
 ## Access Boundaries
@@ -351,10 +353,12 @@ and let a human review; do not try to escalate privileges to get something merge
 
 ## Verifying Completion
 
-Before you report a task as done, run the compliance gate and keep working until it passes:
+Before you report a task as done, run the completion gate and keep working until it passes:
 
-- Call \`check_compliance\` (MCP) or run \`specreg comply\` (regenerates the trace, checks, and
-  exits non-zero when not compliant). Pass your honest self-assessed score.
+- Call \`finish_task\` (MCP) with the \`session_id\` returned by \`begin_task\`, or run
+  \`specreg comply\` (regenerates the trace, checks, and exits non-zero when not compliant).
+  Pass your honest self-assessed score. Use \`check_compliance\` for direct compliance checks
+  when you do not need session lifecycle tracking.
 - The registry decides compliance **objectively** (traceability coverage, drift, unmapped
   entities against this project's policy). Claiming "100%" yourself is not enough — over-claims
   are flagged. If the verdict is NOT COMPLIANT, address the listed outstanding items
@@ -391,14 +395,16 @@ so the dashboard-downloaded CLI also provides the MCP server.
 ${token ? "Authentication is configured through `SPECREG_TOKEN` in `.mcp.json`.\n" : "If the registry requires auth, add `SPECREG_TOKEN` to `.mcp.json`.\n"}
 Required MCP flow:
 
-1. Call \`get_specs\` for project type \`${projectType}\` and repo \`${repo}\`.
-2. Use \`search_specs\` for focused questions.
-3. Before writing in a language or working in a domain the loaded specs do not cover
+1. Call \`begin_task\` for the concrete task, project type \`${projectType}\`, and repo \`${repo}\`.
+2. Call \`get_specs\` for project type \`${projectType}\` and repo \`${repo}\`.
+3. Use \`search_specs\` for focused questions.
+4. Before writing in a language or working in a domain the loaded specs do not cover
    (e.g. a new language, or networking/auth/database work), call \`resolve_guidance\`
    with the language(s) and/or topic. It returns the governed specs that apply and the
    styleguides you can pull, or an explicit gap.
-4. Report ambiguity, contradiction, or outdated guidance with \`report_spec_feedback\`.
-5. Use \`specreg check\` to verify this repo is still using current approved spec versions.
+5. Report ambiguity, contradiction, or outdated guidance with \`report_spec_feedback\`.
+6. Call \`finish_task\` with the \`session_id\` returned by \`begin_task\` before claiming completion.
+7. Use \`specreg check\` to verify this repo is still using current approved spec versions.
 
 ## Missing Guidance
 
@@ -417,6 +423,8 @@ and only these endpoints:
 - \`GET ${server}/api/v1/ai/specs/${encodeURIComponent(projectType)}\` — current governed specs.
 - \`GET ${server}/api/v1/ai/search?q=...\` — focused section search.
 - \`POST ${server}/api/v1/ai/resolve-guidance\` — resolve styleguides/specs for a language or topic.
+- \`POST ${server}/api/v1/ai/agent-sessions/begin\` — register preflight and get a session id.
+- \`POST ${server}/api/v1/ai/agent-sessions/finish\` — record completion evidence and run the completion gate.
 - \`POST ${server}/api/v1/ai/feedback\` — report a spec problem.
 
 Use the \`specreg\` CLI for everything else (\`check\`, \`sync\`, \`compile\`, \`verify\`,

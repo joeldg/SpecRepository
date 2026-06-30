@@ -536,11 +536,13 @@ present in the environment or passed with `--token`.
 
 The MCP server exposes these tools:
 
+- `begin_task` — register an agent session, run preflight, and return the governed spec bundle to load.
+- `finish_task` — record completion evidence, run objective compliance, and block completion until it passes.
 - `list_project_types` — discover registry project types.
 - `get_specs` — fetch governed global + project-type + project-scoped specs.
 - `search_specs` — retrieve matching spec sections, including project-scoped matches, without loading everything.
 - `resolve_guidance` — check whether a language or domain is governed before inventing a local standard.
-- `check_compliance` — record and evaluate the objective compliance loop before claiming completion.
+- `check_compliance` — record and evaluate the objective compliance loop directly, useful for CI or ad hoc checks.
 - `get_audit_prompt` — fetch a reverse-conformance audit prompt for a governed spec.
 - `report_spec_feedback` — file ambiguity, contradiction, or outdated-guidance feedback.
 

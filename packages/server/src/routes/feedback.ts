@@ -71,6 +71,15 @@ function dedupeSearchResults(rows: SearchResult[]): SearchResult[] {
   });
 }
 
+function optionalString(body: Record<string, unknown>, field: string): string | undefined {
+  const value = body[field];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim() !== "").map((item) => item.trim()) : [];
+}
+
 export async function feedbackRoutes(app: FastifyInstance): Promise<void> {
   // Agent-facing onboarding guide: feed this markdown to an agent so it knows how
   // to configure and use the SpecRegistry MCP server in a codebase.
@@ -146,6 +155,198 @@ export async function feedbackRoutes(app: FastifyInstance): Promise<void> {
     );
     reply.code(201);
     return app.db.prepare("SELECT * FROM agent_feedback WHERE id = ?").get(id);
+  });
+
+  // Agent lifecycle preflight. Agents call this when starting non-trivial work so
+  // the registry records the task, active repo, model, loaded spec bundle, and
+  // concrete next controls before edits begin.
+  app.post("/ai/agent-sessions/begin", async (req, reply) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const pt = requireProjectType(app.db, requireString(body, "project_type"));
+    const project =
+      typeof body.project_id === "string"
+        ? findProjectConsumer(app.db, body.project_id, pt.id)
+        : typeof body.repo === "string"
+          ? findProjectConsumer(app.db, body.repo, pt.id)
+          : undefined;
+    const specs = bundleSpecs(app.db, pt.id, "stable", project?.id) as Array<Spec & { project_type_name?: string; project_type_scope: string }>;
+    const blockers: string[] = [];
+    const warnings: string[] = [];
+    if (specs.length === 0) blockers.push("No published governed specs were found for this project type.");
+    if (!project && !optionalString(body, "repo")) warnings.push("No registered repo/project identity was supplied; project-scoped specs and trace history may be unavailable.");
+    if (stringList(body.specs_loaded).length === 0) warnings.push("Agent did not declare which spec files it loaded before starting.");
+
+    const specBundle = specs.map((spec) => ({
+      id: spec.id,
+      filename: spec.filename,
+      version: spec.current_version,
+      scope: spec.project_id ? "project" : spec.project_type_scope,
+      project_type: spec.project_type_name ?? pt.name,
+    }));
+    const session = {
+      id: uuid(),
+      agent_identifier: optionalString(body, "agent_identifier") ?? "mcp-agent",
+      task: requireString(body, "task"),
+      status: blockers.length === 0 ? "active" : "blocked",
+      project_type_id: pt.id,
+      consumer_id: project?.id ?? null,
+      repo: project?.repo ?? optionalString(body, "repo") ?? null,
+      branch: optionalString(body, "branch") ?? project?.branch ?? null,
+      model: optionalString(body, "model") ?? null,
+      mcp_server: optionalString(body, "mcp_server") ?? null,
+      plan: optionalString(body, "plan") ?? null,
+      preflight_summary: JSON.stringify({
+        blockers,
+        warnings,
+        declared_specs_loaded: stringList(body.specs_loaded),
+        next_required_tools: ["get_specs", "resolve_guidance as needed", "check_compliance or finish_task before completion"],
+      }),
+    };
+    const ts = now();
+    app.db
+      .prepare(
+          `INSERT INTO agent_sessions
+          (id, agent_identifier, project_type_id, consumer_id, repo, branch, task, model, mcp_server,
+           spec_count, spec_bundle, status, plan, preflight_summary, started_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        session.id,
+        session.agent_identifier,
+        session.project_type_id,
+        session.consumer_id,
+        session.repo,
+        session.branch,
+        session.task,
+        session.model,
+        session.mcp_server,
+        specBundle.length,
+        JSON.stringify(specBundle),
+        session.status,
+        session.plan,
+        session.preflight_summary,
+        ts,
+        ts
+      );
+    recordUsage(app.db, "agent_read", pt.id, "agent-session-begin");
+    reply.code(201);
+    return {
+      session_id: session.id,
+      status: blockers.length === 0 ? "ready" : "blocked",
+      project_type: pt.name,
+      project: project?.repo ?? session.repo,
+      blockers,
+      warnings,
+      specs: specBundle,
+      required_finish_tool: "finish_task",
+      directive:
+        blockers.length === 0
+          ? "PREFLIGHT READY — load the listed specs, follow the declared plan, and call finish_task before claiming completion."
+          : "PREFLIGHT BLOCKED — resolve blockers or report spec feedback before editing.",
+    };
+  });
+
+  // Agent lifecycle completion gate. This wraps the compliance evaluator, updates
+  // the session, and refuses a completion status until objective compliance passes.
+  app.post("/ai/agent-sessions/finish", async (req) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const sessionId = optionalString(body, "session_id");
+    const session = sessionId
+      ? (app.db.prepare("SELECT * FROM agent_sessions WHERE id = ?").get(sessionId) as
+          | {
+              id: string;
+              project_type_id: string | null;
+              consumer_id: string | null;
+              repo: string | null;
+              task: string;
+            }
+          | undefined)
+      : undefined;
+    if (sessionId && !session) throw new HttpError(404, `Unknown agent session: ${sessionId}`);
+    const pt = session?.project_type_id
+      ? requireProjectType(app.db, session.project_type_id)
+      : requireProjectType(app.db, requireString(body, "project_type"));
+    const project =
+      session?.consumer_id
+        ? findProjectConsumer(app.db, session.consumer_id, pt.id)
+        : typeof body.project_id === "string"
+          ? findProjectConsumer(app.db, body.project_id, pt.id)
+          : typeof body.repo === "string"
+            ? findProjectConsumer(app.db, body.repo, pt.id)
+            : undefined;
+    const trace = body.trace && typeof body.trace === "object" ? (body.trace as Record<string, unknown>) : undefined;
+    const selfAssessedScore = typeof body.self_assessed_score === "number" ? body.self_assessed_score : null;
+    const verdict = evaluateCompliance(app.db, {
+      pt,
+      consumerId: project?.id ?? session?.consumer_id ?? undefined,
+      repo: project?.repo ?? session?.repo ?? optionalString(body, "repo"),
+      trace,
+      selfAssessedScore,
+    });
+    const latestAttestation = (project?.repo ?? session?.repo ?? optionalString(body, "repo"))
+      ? (app.db
+          .prepare("SELECT id FROM compliance_attestations WHERE repo = ? ORDER BY created_at DESC LIMIT 1")
+          .get(project?.repo ?? session?.repo ?? optionalString(body, "repo")) as { id: string } | undefined)
+      : undefined;
+    const status = verdict.compliant ? "completed" : "blocked";
+    const completionSummary = {
+      summary: optionalString(body, "summary") ?? null,
+      tests: stringList(body.tests),
+      changed_files: stringList(body.changed_files),
+      outstanding: verdict.outstanding,
+      objective_score: verdict.objective_score,
+    };
+    if (session) {
+      const ts = now();
+      app.db
+        .prepare(
+          `UPDATE agent_sessions
+           SET status = ?, completion_summary = ?, compliance_attestation_id = ?, completed_at = ?, updated_at = ?
+           WHERE id = ?`
+        )
+        .run(status, JSON.stringify(completionSummary), latestAttestation?.id ?? null, verdict.compliant ? ts : null, ts, session.id);
+    }
+    recordUsage(app.db, "sync_check", pt.id, "agent-session-finish");
+    return {
+      session_id: session?.id ?? null,
+      status,
+      compliant: verdict.compliant,
+      compliance: verdict,
+      directive: verdict.compliant
+        ? "COMPLETION ACCEPTED — objective compliance passed and the session may be reported complete."
+        : "COMPLETION BLOCKED — objective compliance failed. Continue remediation and call finish_task again.",
+    };
+  });
+
+  app.get("/ai/agent-sessions", async (req) => {
+    const { repo, status, limit } = req.query as { repo?: string; status?: string; limit?: string };
+    const clauses: string[] = [];
+    const params: unknown[] = [];
+    if (repo) {
+      clauses.push("repo = ?");
+      params.push(repo);
+    }
+    if (status && ["active", "completed", "blocked"].includes(status)) {
+      clauses.push("status = ?");
+      params.push(status);
+    }
+    params.push(Math.max(1, Math.min(200, Number(limit ?? 50) || 50)));
+    const rows = app.db
+      .prepare(
+        `SELECT s.*, pt.name AS project_type_name
+         FROM agent_sessions s
+         LEFT JOIN project_types pt ON pt.id = s.project_type_id
+         ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""}
+         ORDER BY s.started_at DESC
+         LIMIT ?`
+      )
+      .all(...params) as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      ...row,
+      spec_bundle: typeof row.spec_bundle === "string" ? JSON.parse(row.spec_bundle) : [],
+      preflight_summary: typeof row.preflight_summary === "string" && row.preflight_summary ? JSON.parse(row.preflight_summary) : null,
+      completion_summary: typeof row.completion_summary === "string" && row.completion_summary ? JSON.parse(row.completion_summary) : null,
+    }));
   });
 
   // Compliance verification loop. Agents call this before declaring a task done.

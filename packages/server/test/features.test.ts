@@ -1473,3 +1473,91 @@ describe("compliance verification loop", () => {
     expect(res.json().outstanding.some((o: any) => o.check === "coverage")).toBe(true);
   });
 });
+
+describe("agent lifecycle control plane", () => {
+  const compliantTrace = {
+    schema_version: 1,
+    coverage: { governed_entity_count: 8, linked_entity_count: 8, unlinked_entity_count: 0, coverage_ratio: 1, unlinked_by_kind: {} },
+    drift: { score: 0, severity: "none" },
+  };
+
+  it("registers a preflight session with the governed spec bundle", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/ai/agent-sessions/begin",
+      payload: {
+        project_type: "Acme Edge Device",
+        repo: "github.com/acme/lifecycle",
+        task: "Add governed lifecycle controls",
+        plan: "Load specs, implement controls, verify.",
+        model: "test-model",
+        specs_loaded: ["GLOBAL_SECURITY.md"],
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.session_id).toMatch(/[0-9a-f-]{36}/);
+    expect(body.status).toBe("ready");
+    expect(body.specs.length).toBeGreaterThan(0);
+    expect(body.required_finish_tool).toBe("finish_task");
+
+    const sessions = await getJson("/api/v1/ai/agent-sessions?repo=github.com/acme/lifecycle");
+    expect(sessions[0]).toMatchObject({
+      id: body.session_id,
+      status: "active",
+      task: "Add governed lifecycle controls",
+      model: "test-model",
+      repo: "github.com/acme/lifecycle",
+    });
+    expect(sessions[0].spec_bundle.length).toBeGreaterThan(0);
+  });
+
+  it("blocks finish until objective compliance passes, then completes the session", async () => {
+    const begin = await app.inject({
+      method: "POST",
+      url: "/api/v1/ai/agent-sessions/begin",
+      payload: {
+        project_type: "Acme Edge Device",
+        repo: "github.com/acme/finish-loop",
+        task: "Finish through objective gate",
+        specs_loaded: ["GLOBAL_SECURITY.md"],
+      },
+    });
+    const sessionId = begin.json().session_id;
+
+    const blocked = await app.inject({
+      method: "POST",
+      url: "/api/v1/ai/agent-sessions/finish",
+      payload: {
+        session_id: sessionId,
+        summary: "Tried to finish without trace.",
+        self_assessed_score: 100,
+        tests: ["npm test"],
+      },
+    });
+    expect(blocked.statusCode).toBe(200);
+    expect(blocked.json().status).toBe("blocked");
+    expect(blocked.json().compliant).toBe(false);
+    expect(blocked.json().directive).toMatch(/COMPLETION BLOCKED/);
+
+    const completed = await app.inject({
+      method: "POST",
+      url: "/api/v1/ai/agent-sessions/finish",
+      payload: {
+        session_id: sessionId,
+        summary: "Trace is now mapped.",
+        self_assessed_score: 100,
+        changed_files: ["packages/server/src/routes/feedback.ts"],
+        trace: compliantTrace,
+      },
+    });
+    expect(completed.statusCode).toBe(200);
+    expect(completed.json().status).toBe("completed");
+    expect(completed.json().compliant).toBe(true);
+
+    const sessions = await getJson("/api/v1/ai/agent-sessions?status=completed");
+    const session = sessions.find((row: any) => row.id === sessionId);
+    expect(session.completion_summary.summary).toBe("Trace is now mapped.");
+    expect(session.compliance_attestation_id).toMatch(/[0-9a-f-]{36}/);
+  });
+});

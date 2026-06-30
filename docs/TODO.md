@@ -29,17 +29,43 @@
 
 ## Agent Access Control
 
+- [x] Agent session registry: persist active/completed agent runs by repo, project type,
+  task, model, MCP server, loaded spec bundle, preflight summary, completion evidence,
+  compliance attestation, and timestamps.
+- [x] MCP preflight gate (`begin_task`): require agents to register task intent, repo,
+  model, plan, and loaded specs before non-trivial implementation work; return blockers,
+  warnings, and the governed spec bundle.
+- [x] MCP completion gate (`finish_task`): record completion evidence, wrap the objective
+  compliance evaluator, update the session, and block completion claims until the
+  compliance gate passes.
 - [x] Advisory agent access boundaries: `SPECREGISTRY.md` and the `AGENT_OPERATING_RULES`
   governed spec now constrain agents to the MCP server, the documented agent API
-  (`get_specs`, `search_specs`, `report_spec_feedback`), and the `specreg` CLI — no
-  dashboard browsing, endpoint probing, or server-internals inspection.
+  (`begin_task`, `get_specs`, `search_specs`, `finish_task`, `report_spec_feedback`),
+  and the `specreg` CLI — no dashboard browsing, endpoint probing, or server-internals
+  inspection.
+- [ ] Governed tool permission profiles by project/spec/task, covering allowed file edits,
+  shell/network/dependency/database actions, destructive commands, LLM usage, and
+  escalation expectations for the host agent.
+- [ ] Task-intent to spec mapping: require agents to declare applicable specs/sections and
+  compare that declaration to registry guidance to detect missed governing specs.
+- [ ] Human intervention queue for failed compliance, conflicting specs, missing guidance,
+  or ambiguous task intent instead of letting agents guess through blockers.
+- [ ] Agent run timeline: event stream for loaded specs, selected skills, searches,
+  generated files, commands/checks run, compliance iterations, feedback submitted, and
+  final claims.
+- [ ] Prompt-budget policy controls for agents, including required/optional/summarized spec
+  tiers, max prompt budgets by task class, and token warnings for low-value context.
+- [ ] Model/provider policy controls for agent task classes, such as cheap/local for
+  classification, frontier for governance audits, and local-only for private repos.
+- [ ] Spec conflict escalation workflow where agents submit contradictory clauses,
+  affected specs, implementation impact, and proposed resolution path.
 - [ ] Hard agent access enforcement: issue a scoped `agent`-role token during `specreg init`
   and wire `SPECREG_AUTH=required` into the init/MCP flow so the MCP/API limitation is
   enforced at the network layer, not just advised. Anything beyond the agent-tier endpoints
   is then rejected with 401/403 rather than relying on agent cooperation.
-- [ ] Dedicated agent-scope token type (narrower than the `agent` role) that allows only the
-  three agent API endpoints + manifest/code-trace telemetry, with per-repo issuance and
-  revocation from the admin console.
+- [ ] Dedicated agent-scope token type (narrower than the `agent` role) that allows only
+  documented lifecycle/spec/feedback endpoints plus manifest/code-trace telemetry, with
+  per-repo issuance and revocation from the admin console.
 
 ## Quality and Safety
 

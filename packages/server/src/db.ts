@@ -313,6 +313,29 @@ CREATE TABLE IF NOT EXISTS compliance_attestations (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_compliance_attestations_repo ON compliance_attestations(repo, created_at);
+
+CREATE TABLE IF NOT EXISTS agent_sessions (
+  id TEXT PRIMARY KEY,
+  agent_identifier TEXT NOT NULL,
+  project_type_id TEXT,
+  consumer_id TEXT,
+  repo TEXT,
+  branch TEXT,
+  task TEXT NOT NULL,
+  model TEXT,
+  mcp_server TEXT,
+  spec_count INTEGER NOT NULL DEFAULT 0,
+  spec_bundle TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed', 'blocked')),
+  plan TEXT,
+  preflight_summary TEXT,
+  completion_summary TEXT,
+  compliance_attestation_id TEXT,
+  started_at TEXT NOT NULL,
+  completed_at TEXT,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_repo_time ON agent_sessions(repo, started_at);
 `;
 
 /** Versioned migrations for databases created before the current schema. Each runs once. */
@@ -552,6 +575,34 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
         created_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_compliance_attestations_repo ON compliance_attestations(repo, created_at);
+    `,
+  },
+  {
+    // Agent lifecycle registry for MCP begin_task / finish_task control points.
+    version: 20,
+    sql: `
+      CREATE TABLE IF NOT EXISTS agent_sessions (
+        id TEXT PRIMARY KEY,
+        agent_identifier TEXT NOT NULL,
+        project_type_id TEXT,
+        consumer_id TEXT,
+        repo TEXT,
+        branch TEXT,
+        task TEXT NOT NULL,
+        model TEXT,
+        mcp_server TEXT,
+        spec_count INTEGER NOT NULL DEFAULT 0,
+        spec_bundle TEXT NOT NULL DEFAULT '[]',
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed', 'blocked')),
+        plan TEXT,
+        preflight_summary TEXT,
+        completion_summary TEXT,
+        compliance_attestation_id TEXT,
+        started_at TEXT NOT NULL,
+        completed_at TEXT,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_agent_sessions_repo_time ON agent_sessions(repo, started_at);
     `,
   },
 ];
