@@ -653,6 +653,18 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
         AND instructions = 'Before non-trivial work, use the SpecRegistry MCP get_specs tool for the configured project type and repository. Check the local manifest for drift. Treat published specs as authoritative and do not treat drafts as approved guidance.';
     `,
   },
+  {
+    version: 23,
+    sql: "ALTER TABLE agent_feedback ADD COLUMN project_type_id TEXT REFERENCES project_types(id)",
+  },
+  {
+    version: 24,
+    sql: "ALTER TABLE agent_feedback ADD COLUMN languages TEXT",
+  },
+  {
+    version: 25,
+    sql: "ALTER TABLE agent_feedback ADD COLUMN topic TEXT",
+  },
 ];
 
 const DEFAULT_AGENT_SKILLS = [

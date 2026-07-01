@@ -73,3 +73,36 @@ describe("agent skill migration (v22)", () => {
     db.close();
   });
 });
+
+describe("agent feedback gap metadata migrations", () => {
+  it("adds project_type_id/languages/topic to databases that already passed the v21 feedback rebuild", () => {
+    const dbPath = tmpDbPath();
+    const setup = createDb(dbPath);
+    setup.exec(`
+      PRAGMA foreign_keys = OFF;
+      ALTER TABLE agent_feedback RENAME TO agent_feedback_current;
+      CREATE TABLE agent_feedback (
+        id TEXT PRIMARY KEY,
+        spec_id TEXT REFERENCES specs(id),
+        spec_version TEXT,
+        agent_identifier TEXT NOT NULL,
+        error_type TEXT NOT NULL CHECK (error_type IN ('ambiguity', 'contradiction', 'outdated', 'missing_guidance')),
+        context_code_snippet TEXT,
+        description TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'acknowledged', 'resolved')),
+        created_at TEXT NOT NULL
+      );
+      DROP TABLE agent_feedback_current;
+      PRAGMA foreign_keys = ON;
+      UPDATE settings SET value = '22' WHERE key = 'schema_version';
+    `);
+    setup.close();
+
+    const migrated = createDb(dbPath);
+    const columns = migrated.prepare("PRAGMA table_info(agent_feedback)").all() as Array<{ name: string }>;
+    expect(columns.map((column) => column.name)).toEqual(
+      expect.arrayContaining(["project_type_id", "languages", "topic"])
+    );
+    migrated.close();
+  });
+});
