@@ -30,9 +30,18 @@ export const CODE_METADATA_FEATURE_KEYS = [
   "coverage_reports",
 ] as const;
 
+export const HARNESS_IMPROVEMENT_FEATURE_KEYS = [
+  "enabled",
+  "failure_pattern_mining",
+  "proposal_drafting",
+  "regression_validation",
+  "review_promotion",
+] as const;
+
 export type AutomationFeatureKey = (typeof AUTOMATION_FEATURE_KEYS)[number];
 export type CodeMetadataFeatureKey = (typeof CODE_METADATA_FEATURE_KEYS)[number];
-export type FeatureGroupKey = "automation" | "code_metadata";
+export type HarnessImprovementFeatureKey = (typeof HARNESS_IMPROVEMENT_FEATURE_KEYS)[number];
+export type FeatureGroupKey = "automation" | "code_metadata" | "harness_improvement";
 export type FeatureValues<T extends string> = Record<T, boolean>;
 
 export interface FeatureDescriptor<T extends string = string> {
@@ -45,9 +54,11 @@ export interface FeatureDescriptor<T extends string = string> {
 export interface FeatureConfig {
   automation: FeatureValues<AutomationFeatureKey>;
   code_metadata: FeatureValues<CodeMetadataFeatureKey>;
+  harness_improvement: FeatureValues<HarnessImprovementFeatureKey>;
   catalog: {
     automation: Array<FeatureDescriptor<AutomationFeatureKey>>;
     code_metadata: Array<FeatureDescriptor<CodeMetadataFeatureKey>>;
+    harness_improvement: Array<FeatureDescriptor<HarnessImprovementFeatureKey>>;
   };
 }
 
@@ -81,6 +92,14 @@ const CODE_METADATA_ENV: Record<CodeMetadataFeatureKey, string> = {
   coverage_reports: "SPECREG_CODE_METADATA_COVERAGE_REPORTS",
 };
 
+const HARNESS_IMPROVEMENT_ENV: Record<HarnessImprovementFeatureKey, string> = {
+  enabled: "SPECREG_HARNESS_IMPROVEMENT_ENABLED",
+  failure_pattern_mining: "SPECREG_HARNESS_IMPROVEMENT_FAILURE_PATTERN_MINING",
+  proposal_drafting: "SPECREG_HARNESS_IMPROVEMENT_PROPOSAL_DRAFTING",
+  regression_validation: "SPECREG_HARNESS_IMPROVEMENT_REGRESSION_VALIDATION",
+  review_promotion: "SPECREG_HARNESS_IMPROVEMENT_REVIEW_PROMOTION",
+};
+
 const CODE_METADATA_DEFAULTS: Record<CodeMetadataFeatureKey, boolean> = {
   enabled: true,
   typescript_javascript: true,
@@ -95,6 +114,14 @@ const CODE_METADATA_DEFAULTS: Record<CodeMetadataFeatureKey, boolean> = {
   semantic_drift: true,
   code_embedding_profile: true,
   coverage_reports: true,
+};
+
+const HARNESS_IMPROVEMENT_DEFAULTS: Record<HarnessImprovementFeatureKey, boolean> = {
+  enabled: false,
+  failure_pattern_mining: true,
+  proposal_drafting: false,
+  regression_validation: true,
+  review_promotion: true,
 };
 
 const AUTOMATION_CATALOG: Array<FeatureDescriptor<AutomationFeatureKey>> = [
@@ -125,6 +152,14 @@ const CODE_METADATA_CATALOG: Array<FeatureDescriptor<CodeMetadataFeatureKey>> = 
   { key: "semantic_drift", label: "Semantic drift pipeline", description: "Compare code metadata against governed specs and report drift severity.", stage: "available" },
   { key: "code_embedding_profile", label: "Code embedding profile", description: "Configure embedding guidance for code entities separately from specs.", stage: "available" },
   { key: "coverage_reports", label: "Code-to-spec coverage reports", description: "Report mapped, unmapped, and stale implementation surfaces.", stage: "available" },
+];
+
+const HARNESS_IMPROVEMENT_CATALOG: Array<FeatureDescriptor<HarnessImprovementFeatureKey>> = [
+  { key: "enabled", label: "Harness improvement master switch", description: "Controls experimental Self-Harness-style insights and proposal workflows.", stage: "available" },
+  { key: "failure_pattern_mining", label: "Failure pattern mining", description: "Mine agent sessions, feedback, and compliance evidence for recurring harness-level weaknesses.", stage: "available" },
+  { key: "proposal_drafting", label: "Proposal drafting", description: "Draft bounded changes to governed agent skills, MCP guidance, and generated agent instructions.", stage: "available" },
+  { key: "regression_validation", label: "Regression validation", description: "Evaluate proposed harness edits against fixed smoke/eval gates before approval.", stage: "available" },
+  { key: "review_promotion", label: "Review-gated promotion", description: "Route accepted proposals through normal review and audit trails instead of auto-publishing.", stage: "available" },
 ];
 
 function envFlag(envName: string, fallback: boolean): boolean {
@@ -180,18 +215,30 @@ export function getCodeMetadataFeatureFlags(db: Db): FeatureValues<CodeMetadataF
   ) as FeatureValues<CodeMetadataFeatureKey>;
 }
 
+export function getHarnessImprovementFeatureFlags(db: Db): FeatureValues<HarnessImprovementFeatureKey> {
+  const values = valuesFor(db, "harness_improvement", HARNESS_IMPROVEMENT_FEATURE_KEYS, HARNESS_IMPROVEMENT_ENV, HARNESS_IMPROVEMENT_DEFAULTS);
+  if (!values.enabled) {
+    return Object.fromEntries(HARNESS_IMPROVEMENT_FEATURE_KEYS.map((key) => [key, key === "enabled" ? false : false])) as FeatureValues<HarnessImprovementFeatureKey>;
+  }
+  return Object.fromEntries(
+    HARNESS_IMPROVEMENT_FEATURE_KEYS.map((key) => [key, key === "enabled" ? true : values[key]])
+  ) as FeatureValues<HarnessImprovementFeatureKey>;
+}
+
 export function getFeatureConfig(db: Db): FeatureConfig {
   return {
     automation: getAutomationFeatureFlags(db),
     code_metadata: getCodeMetadataFeatureFlags(db),
+    harness_improvement: getHarnessImprovementFeatureFlags(db),
     catalog: {
       automation: AUTOMATION_CATALOG,
       code_metadata: CODE_METADATA_CATALOG,
+      harness_improvement: HARNESS_IMPROVEMENT_CATALOG,
     },
   };
 }
 
-export function saveFeatureConfig(db: Db, input: Partial<Pick<FeatureConfig, "automation" | "code_metadata">>): FeatureConfig {
+export function saveFeatureConfig(db: Db, input: Partial<Pick<FeatureConfig, "automation" | "code_metadata" | "harness_improvement">>): FeatureConfig {
   const upsert = db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)");
   const saveGroup = <T extends string>(group: FeatureGroupKey, keys: readonly T[], values?: Partial<Record<T, boolean>>) => {
     if (!values) return;
@@ -202,5 +249,6 @@ export function saveFeatureConfig(db: Db, input: Partial<Pick<FeatureConfig, "au
   };
   saveGroup("automation", AUTOMATION_FEATURE_KEYS, input.automation);
   saveGroup("code_metadata", CODE_METADATA_FEATURE_KEYS, input.code_metadata);
+  saveGroup("harness_improvement", HARNESS_IMPROVEMENT_FEATURE_KEYS, input.harness_improvement);
   return getFeatureConfig(db);
 }

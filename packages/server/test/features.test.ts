@@ -1300,6 +1300,10 @@ describe("LLM spec automation", () => {
       stage: "available",
     });
     expect(initial.code_metadata.traceability_graph).toBe(true);
+    expect(initial.harness_improvement.enabled).toBe(false);
+    expect(initial.catalog.harness_improvement.find((feature: any) => feature.key === "failure_pattern_mining")).toMatchObject({
+      stage: "available",
+    });
     const enabled = await app.inject({
       method: "PUT",
       url: "/api/v1/features/config",
@@ -1314,11 +1318,13 @@ describe("LLM spec automation", () => {
       payload: {
         automation: { task_planner: false },
         code_metadata: { python: false, coverage_reports: false },
+        harness_improvement: { enabled: true, failure_pattern_mining: true },
       },
     });
     expect(saved.statusCode).toBe(200);
     expect(saved.json().automation.task_planner).toBe(false);
     expect(saved.json().code_metadata.python).toBe(false);
+    expect(saved.json().harness_improvement.enabled).toBe(true);
 
     const flags = await getJson("/api/v1/automation/features");
     expect(flags.task_planner).toBe(false);
@@ -1337,6 +1343,121 @@ describe("LLM spec automation", () => {
     });
     expect(restored.statusCode).toBe(200);
     expect(restored.json().automation.task_planner).toBe(true);
+  });
+
+  it("mines harness improvement insights only when the feature is enabled", async () => {
+    const disabled = await getJson("/api/v1/features/harness-insights");
+    expect(disabled.enabled).toBe(false);
+    expect(disabled.patterns).toEqual([]);
+
+    const pt = app.db.prepare("SELECT id FROM project_types WHERE name = ?").get("Acme Edge Device") as { id: string };
+    app.db
+      .prepare(
+        `INSERT INTO agent_sessions
+          (id, agent_identifier, project_type_id, repo, task, spec_count, spec_bundle, status, completion_summary, started_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 0, '[]', 'blocked', ?, ?, ?)`
+      )
+      .run(
+        "session-harness-insight-1",
+        "test-agent",
+        pt.id,
+        "joeldg/edge-firmware",
+        "ship telemetry",
+        JSON.stringify({ outstanding: ["coverage too low"], objective_score: 40 }),
+        new Date().toISOString(),
+        new Date().toISOString()
+      );
+
+    const saved = await app.inject({
+      method: "PUT",
+      url: "/api/v1/features/config",
+      payload: { harness_improvement: { enabled: true, failure_pattern_mining: true, proposal_drafting: true } },
+    });
+    expect(saved.statusCode).toBe(200);
+
+    const enabled = await getJson("/api/v1/features/harness-insights");
+    expect(enabled.enabled).toBe(true);
+    expect(enabled.patterns).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "blocked-finish-compliance",
+          support: 1,
+        }),
+      ])
+    );
+
+    const proposal = await app.inject({
+      method: "POST",
+      url: "/api/v1/features/harness-insights/blocked-finish-compliance/proposal",
+      payload: {},
+    });
+    expect(proposal.statusCode).toBe(200);
+    expect(proposal.json()).toMatchObject({
+      key: "blocked-finish-compliance",
+      proposal_type: "agent_skill_update",
+      target_skill: expect.objectContaining({ slug: "run-compliance-loop" }),
+      promotion: "review-gated; preview only, no skill was modified",
+    });
+    expect(proposal.json().proposed_instructions).toContain("finish_task returns blocked");
+
+    const submitted = await app.inject({
+      method: "POST",
+      url: "/api/v1/features/harness-insights/blocked-finish-compliance/proposals",
+      payload: { proposed_by: "harness-miner" },
+    });
+    expect(submitted.statusCode).toBe(201);
+    expect(submitted.json()).toMatchObject({
+      pattern_key: "blocked-finish-compliance",
+      target_slug: "run-compliance-loop",
+      status: "pending",
+      proposed_by: "harness-miner",
+    });
+
+    const pending = await getJson("/api/v1/features/harness-proposals?status=pending");
+    expect(pending).toEqual(expect.arrayContaining([expect.objectContaining({ id: submitted.json().id })]));
+    const validation = await app.inject({
+      method: "POST",
+      url: `/api/v1/features/harness-proposals/${submitted.json().id}/validate`,
+      payload: {},
+    });
+    expect(validation.statusCode).toBe(200);
+    expect(validation.json()).toMatchObject({
+      current_target_matches_proposal: true,
+      validation: expect.objectContaining({ status: "passed" }),
+    });
+
+    const before = app.db.prepare("SELECT instructions FROM agent_skills WHERE slug = ?").get("run-compliance-loop") as {
+      instructions: string;
+    };
+    expect(before.instructions).not.toContain("finish_task returns blocked");
+
+    const invalid = await app.inject({
+      method: "POST",
+      url: "/api/v1/features/harness-insights/blocked-finish-compliance/proposals",
+      payload: { proposed_by: "harness-miner-2" },
+    });
+    expect(invalid.statusCode).toBe(201);
+    app.db
+      .prepare("UPDATE harness_proposals SET proposed_instructions = ?, proposed_addition = ? WHERE id = ?")
+      .run("Do less.", "Harness improvement proposal: Do less.", invalid.json().id);
+    const blockedApproval = await app.inject({
+      method: "POST",
+      url: `/api/v1/features/harness-proposals/${invalid.json().id}/approve`,
+      payload: { reviewed_by: "harness-reviewer" },
+    });
+    expect(blockedApproval.statusCode).toBe(409);
+
+    const approved = await app.inject({
+      method: "POST",
+      url: `/api/v1/features/harness-proposals/${submitted.json().id}/approve`,
+      payload: { reviewed_by: "harness-reviewer" },
+    });
+    expect(approved.statusCode).toBe(200);
+    expect(approved.json()).toMatchObject({ status: "approved", reviewed_by: "harness-reviewer" });
+    const after = app.db.prepare("SELECT instructions FROM agent_skills WHERE slug = ?").get("run-compliance-loop") as {
+      instructions: string;
+    };
+    expect(after.instructions).toContain("finish_task returns blocked");
   });
 });
 

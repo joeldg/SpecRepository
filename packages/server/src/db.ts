@@ -293,6 +293,27 @@ CREATE TABLE IF NOT EXISTS agent_skills (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS harness_proposals (
+  id TEXT PRIMARY KEY,
+  pattern_key TEXT NOT NULL,
+  title TEXT NOT NULL,
+  rationale TEXT NOT NULL,
+  target_type TEXT NOT NULL DEFAULT 'agent_skill' CHECK (target_type IN ('agent_skill')),
+  target_id TEXT NOT NULL REFERENCES agent_skills(id),
+  target_slug TEXT NOT NULL,
+  current_instructions TEXT NOT NULL,
+  proposed_instructions TEXT NOT NULL,
+  proposed_addition TEXT NOT NULL,
+  validation_gate TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  proposed_by TEXT NOT NULL,
+  reviewed_by TEXT,
+  reviewed_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_harness_proposals_status_time ON harness_proposals(status, created_at);
+
 CREATE TABLE IF NOT EXISTS compliance_policies (
   id TEXT PRIMARY KEY,
   project_type_id TEXT UNIQUE,
@@ -664,6 +685,31 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
   {
     version: 25,
     sql: "ALTER TABLE agent_feedback ADD COLUMN topic TEXT",
+  },
+  {
+    version: 26,
+    sql: `
+      CREATE TABLE IF NOT EXISTS harness_proposals (
+        id TEXT PRIMARY KEY,
+        pattern_key TEXT NOT NULL,
+        title TEXT NOT NULL,
+        rationale TEXT NOT NULL,
+        target_type TEXT NOT NULL DEFAULT 'agent_skill' CHECK (target_type IN ('agent_skill')),
+        target_id TEXT NOT NULL REFERENCES agent_skills(id),
+        target_slug TEXT NOT NULL,
+        current_instructions TEXT NOT NULL,
+        proposed_instructions TEXT NOT NULL,
+        proposed_addition TEXT NOT NULL,
+        validation_gate TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+        proposed_by TEXT NOT NULL,
+        reviewed_by TEXT,
+        reviewed_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_harness_proposals_status_time ON harness_proposals(status, created_at);
+    `,
   },
 ];
 

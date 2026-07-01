@@ -846,6 +846,13 @@ Use the LDAP tester in Settings before switching users over.
   section classification, context budget optimization, improvement suggestions, and spec
   pack composition. Automation features are individually flaggable, and LLM-backed variants
   run only when requested and enabled.
+- **Harness improvement controls** — Settings -> Features includes an experimental
+  Self-Harness-style control group. When enabled, `GET /api/v1/features/harness-insights`
+  mines agent sessions, feedback, and compliance attestations for recurring harness-level
+  weaknesses. Proposal drafting can return preview-only governed skill updates while keeping
+  promotion review-gated through pending harness proposals that must be approved before
+  they update any governed skill. Regression validation runs deterministic skill-rendering,
+  safety-boundary, bounded-edit, and pattern-specific gates before approval.
 - **Review SLA** — `GET /api/v1/reviews/sla` summarizes pending review age, warnings,
   breached reviews, and remaining approvals. The dashboard surfaces the oldest pending
   review and breached/warning counts.
@@ -929,6 +936,11 @@ GET  /api/v1/spec-ownership             GET /api/v1/specs/dependency-map
 GET  /api/v1/spec-purposes              POST /api/v1/spec-gaps
 POST /api/v1/spec-generation/preview    POST /api/v1/spec-generation/draft
 GET  /api/v1/automation/features        POST /api/v1/automation/task-plan
+GET  /api/v1/features/config            GET /api/v1/features/harness-insights
+POST /api/v1/features/harness-insights/:key/proposal
+GET  /api/v1/features/harness-proposals POST /api/v1/features/harness-insights/:key/proposals
+POST /api/v1/features/harness-proposals/:id/validate
+POST /api/v1/features/harness-proposals/:id/approve|reject
 POST /api/v1/automation/ticket          POST /api/v1/automation/section-classifier
 POST /api/v1/automation/context-budget  POST /api/v1/automation/audit-prompt
 POST /api/v1/cli/code-trace-report      GET /api/v1/reports/overview
@@ -1029,6 +1041,11 @@ automatically once it is configured.
 | `SPECREG_CODE_METADATA_ROUTE_DETECTION` | Enable route metadata extraction defaults |
 | `SPECREG_CODE_METADATA_SCHEMA_DETECTION` | Enable schema metadata extraction defaults |
 | `SPECREG_CODE_METADATA_INLINE` | Default for optional inline metadata injection (default off) |
+| `SPECREG_HARNESS_IMPROVEMENT_ENABLED` | Enable experimental harness improvement controls (default off) |
+| `SPECREG_HARNESS_IMPROVEMENT_FAILURE_PATTERN_MINING` | Enable mining agent sessions, feedback, and compliance evidence for harness weaknesses |
+| `SPECREG_HARNESS_IMPROVEMENT_PROPOSAL_DRAFTING` | Enable preview-only governed harness proposal drafting (default off) |
+| `SPECREG_HARNESS_IMPROVEMENT_REGRESSION_VALIDATION` | Enable deterministic approval gates for harness proposals |
+| `SPECREG_HARNESS_IMPROVEMENT_REVIEW_PROMOTION` | Keep harness proposals routed through review-gated promotion |
 | `GITHUB_TOKEN` | Git push-back PRs + inbound webhook file fetch; fallback if not saved in Settings |
 | `GITHUB_WEBHOOK_SECRET` | Verify inbound GitHub push webhooks; fallback if not saved in Settings |
 | `SLACK_SIGNING_SECRET` | Verify Slack interactive approve/reject actions; fallback if not saved in Settings |
@@ -1165,6 +1182,11 @@ disable that capability for a deployment. The Generate Specs workbench reads
 `GET /api/v1/automation/features` and disables controls for unavailable features.
 Admins can also manage these flags on **Settings -> Features**. Saved settings are stored
 in the registry database and override environment defaults.
+
+Harness improvement flags live in the same Settings section. They are off by default.
+Failure-pattern mining and proposal drafting are deterministic. Drafted proposals become
+pending harness reviews and only update governed skills after explicit approval and passing
+regression validation.
 
 LLM-backed automation only runs when both conditions are true:
 

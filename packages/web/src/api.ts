@@ -313,6 +313,10 @@ export type CodeMetadataFlags = Record<
   | "coverage_reports",
   boolean
 >;
+export type HarnessImprovementFlags = Record<
+  "enabled" | "failure_pattern_mining" | "proposal_drafting" | "regression_validation" | "review_promotion",
+  boolean
+>;
 export interface FeatureDescriptor {
   key: string;
   label: string;
@@ -322,9 +326,80 @@ export interface FeatureDescriptor {
 export interface FeatureConfig {
   automation: AutomationFlags;
   code_metadata: CodeMetadataFlags;
+  harness_improvement: HarnessImprovementFlags;
   catalog: {
     automation: FeatureDescriptor[];
     code_metadata: FeatureDescriptor[];
+    harness_improvement: FeatureDescriptor[];
+  };
+}
+export interface HarnessImprovementInsight {
+  key: string;
+  title: string;
+  category: string;
+  severity: "low" | "medium" | "high";
+  support: number;
+  evidence: string[];
+  proposed_surface: string;
+  suggested_action: string;
+  validation_gate: string;
+}
+export interface HarnessImprovementInsights {
+  enabled: boolean;
+  generated_at: string;
+  summary: { patterns: number; evidence_items: number };
+  patterns: HarnessImprovementInsight[];
+}
+export interface HarnessImprovementProposal {
+  key: string;
+  title: string;
+  rationale: string;
+  proposal_type: "agent_skill_update";
+  target_skill: {
+    id: string;
+    slug: string;
+    name: string;
+    risk_level: string;
+    status: string;
+    built_in: boolean;
+  };
+  current_instructions: string;
+  proposed_instructions: string;
+  proposed_addition: string;
+  validation_gate: string;
+  validation: HarnessProposalValidation["validation"];
+  promotion: string;
+}
+export interface HarnessProposalRow {
+  id: string;
+  pattern_key: string;
+  title: string;
+  rationale: string;
+  target_type: "agent_skill";
+  target_id: string;
+  target_slug: string;
+  current_instructions: string;
+  proposed_instructions: string;
+  proposed_addition: string;
+  validation_gate: string;
+  status: "pending" | "approved" | "rejected";
+  proposed_by: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  target_name?: string;
+  target_risk_level?: string;
+  target_status?: string;
+}
+export interface HarnessProposalValidation {
+  proposal_id: string;
+  target_slug: string;
+  current_target_matches_proposal: boolean;
+  validation: {
+    status: "passed" | "failed";
+    gate: string;
+    checks: Array<{ key: string; passed: boolean; detail: string }>;
   };
 }
 export interface SearchHit {
@@ -818,8 +893,36 @@ export const api = {
   specPurposes: () => request<SpecPurposeTemplate[]>("/api/v1/spec-purposes"),
   automationFeatures: () => request<AutomationFlags>("/api/v1/automation/features"),
   featureConfig: () => request<FeatureConfig>("/api/v1/features/config"),
-  updateFeatureConfig: (body: Partial<Pick<FeatureConfig, "automation" | "code_metadata">>) =>
+  updateFeatureConfig: (body: Partial<Pick<FeatureConfig, "automation" | "code_metadata" | "harness_improvement">>) =>
     request<FeatureConfig>("/api/v1/features/config", { method: "PUT", body: JSON.stringify(body) }),
+  harnessImprovementInsights: () => request<HarnessImprovementInsights>("/api/v1/features/harness-insights"),
+  harnessImprovementProposal: (key: string) =>
+    request<HarnessImprovementProposal>(`/api/v1/features/harness-insights/${encodeURIComponent(key)}/proposal`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+  createHarnessProposal: (key: string, proposed_by: string) =>
+    request<HarnessProposalRow>(`/api/v1/features/harness-insights/${encodeURIComponent(key)}/proposals`, {
+      method: "POST",
+      body: JSON.stringify({ proposed_by }),
+    }),
+  harnessProposals: (status?: HarnessProposalRow["status"]) =>
+    request<HarnessProposalRow[]>(`/api/v1/features/harness-proposals${status ? `?status=${encodeURIComponent(status)}` : ""}`),
+  validateHarnessProposal: (id: string) =>
+    request<HarnessProposalValidation>(`/api/v1/features/harness-proposals/${id}/validate`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+  approveHarnessProposal: (id: string, reviewed_by: string) =>
+    request<HarnessProposalRow>(`/api/v1/features/harness-proposals/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ reviewed_by }),
+    }),
+  rejectHarnessProposal: (id: string, reviewed_by: string) =>
+    request<HarnessProposalRow>(`/api/v1/features/harness-proposals/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reviewed_by }),
+    }),
   specGaps: (body: { project_type: string; tree: string; detected_languages?: string[]; existing_specs?: string[] }) =>
     request<{ project_type: string; gaps: SpecGap[] }>("/api/v1/spec-gaps", { method: "POST", body: JSON.stringify(body) }),
   generationPreview: (body: {

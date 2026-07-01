@@ -12,6 +12,10 @@ import {
   type EmbeddingConfig,
   type EmbeddingStatus,
   type FeatureConfig,
+  type HarnessImprovementInsights,
+  type HarnessImprovementProposal,
+  type HarnessProposalValidation,
+  type HarnessProposalRow,
   type LdapConfig,
   type LlmConfig,
   type LlmTaskRoute,
@@ -101,6 +105,10 @@ export default function SettingsPage() {
   const [embeddingStatus, setEmbeddingStatus] = useState<EmbeddingStatus>();
   const [appKeys, setAppKeys] = useState<AppKeyConfig>();
   const [featureConfig, setFeatureConfig] = useState<FeatureConfig>();
+  const [harnessInsights, setHarnessInsights] = useState<HarnessImprovementInsights>();
+  const [harnessProposal, setHarnessProposal] = useState<HarnessImprovementProposal>();
+  const [harnessProposals, setHarnessProposals] = useState<HarnessProposalRow[]>([]);
+  const [harnessValidation, setHarnessValidation] = useState<HarnessProposalValidation>();
   const [mcpGuide, setMcpGuide] = useState<McpGuide>();
   const [policies, setPolicies] = useState<ApprovalPolicyRow[]>([]);
   const [compliancePolicies, setCompliancePolicies] = useState<CompliancePolicyConfig>();
@@ -182,12 +190,14 @@ export default function SettingsPage() {
       api.embeddingStatus(),
       api.appKeys(),
       api.featureConfig(),
+      api.harnessImprovementInsights(),
+      api.harnessProposals(),
       api.approvalPolicies(),
       api.compliancePolicies(),
       api.auditLog(50),
       api.agentSkills(true),
     ])
-      .then(([w, s, c, j, t, u, k, l, tieringConfig, embeddingConfig, nextEmbeddingStatus, appKeyConfig, nextFeatureConfig, p, cp, a, nextSkills]) => {
+      .then(([w, s, c, j, t, u, k, l, tieringConfig, embeddingConfig, nextEmbeddingStatus, appKeyConfig, nextFeatureConfig, nextHarnessInsights, nextHarnessProposals, p, cp, a, nextSkills]) => {
         setWebhooks(w);
         setSubs(s);
         setConsumers(c);
@@ -201,6 +211,8 @@ export default function SettingsPage() {
         setEmbeddingStatus(nextEmbeddingStatus);
         setAppKeys(appKeyConfig);
         setFeatureConfig(nextFeatureConfig);
+        setHarnessInsights(nextHarnessInsights);
+        setHarnessProposals(nextHarnessProposals);
         setPolicies(p);
         setCompliancePolicies(cp);
         setAuditRows(a);
@@ -261,7 +273,7 @@ export default function SettingsPage() {
     return saved;
   }
 
-  function setFeatureFlag(group: "automation" | "code_metadata", key: string, enabled: boolean) {
+  function setFeatureFlag(group: "automation" | "code_metadata" | "harness_improvement", key: string, enabled: boolean) {
     setFeatureConfig((current) =>
       current
         ? {
@@ -272,7 +284,7 @@ export default function SettingsPage() {
     );
   }
 
-  function renderFeatureGroup(group: "automation" | "code_metadata", title: string, help: string) {
+  function renderFeatureGroup(group: "automation" | "code_metadata" | "harness_improvement", title: string, help: string) {
     if (!featureConfig) return null;
     const flags = featureConfig[group] as Record<string, boolean>;
     const masterDisabled = flags.enabled === false;
@@ -416,6 +428,195 @@ export default function SettingsPage() {
               "AST metadata and traceability",
               "Controls code-map extraction, durable code IDs, and the upcoming traceability pipeline from implementation surfaces back to specs."
             )}
+            {renderFeatureGroup(
+              "harness_improvement",
+              "Harness improvement",
+              "Controls Self-Harness-style mining and review-gated evolution of governed agent operating procedures."
+            )}
+            <div className="feature-insights">
+              <div>
+                <h3>Self-Harness signals</h3>
+                <p className="settings-help">Mined from agent sessions, feedback clusters, and compliance evidence. Proposals stay review-gated.</p>
+              </div>
+              {!harnessInsights?.enabled ? (
+                <div className="empty">Enable Harness improvement to mine current agent behavior for recurring harness weaknesses.</div>
+              ) : harnessInsights.patterns.length === 0 ? (
+                <div className="empty">No recurring harness weakness patterns found yet.</div>
+              ) : (
+                <table className="grid">
+                  <thead>
+                    <tr>
+                      <th>Pattern</th>
+                      <th>Support</th>
+                      <th>Surface</th>
+                      <th>Gate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {harnessInsights.patterns.map((pattern) => (
+                      <tr key={pattern.key}>
+                        <td>
+                          <strong>{pattern.title}</strong>
+                          <div className="dim">{pattern.suggested_action}</div>
+                          {pattern.evidence.slice(0, 2).map((item) => (
+                            <div className="dim" key={item}>{item}</div>
+                          ))}
+                        </td>
+                        <td>
+                          <span className={`badge ${pattern.severity === "high" ? "rejected" : pattern.severity === "medium" ? "warning" : "approved"}`}>
+                            {pattern.support}
+                          </span>
+                          <button
+                            style={{ marginTop: 8 }}
+                            disabled={!featureConfig.harness_improvement.proposal_drafting}
+                            onClick={() =>
+                              act(async () => {
+                                setHarnessProposal(await api.harnessImprovementProposal(pattern.key));
+                              }, false)
+                            }
+                          >
+                            Preview proposal
+                          </button>
+                        </td>
+                        <td>{pattern.proposed_surface}</td>
+                        <td>{pattern.validation_gate}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {harnessProposal && (
+                <div className="proposal-preview">
+                  <h3>{harnessProposal.title}</h3>
+                  <p className="settings-help">{harnessProposal.rationale}</p>
+                  <div className="form-row">
+                    <span className="badge global">{harnessProposal.target_skill.slug}</span>
+                    <span className="badge draft">Preview only</span>
+                  </div>
+                  <p className="dim">{harnessProposal.promotion}</p>
+                  <label>
+                    Proposed addition
+                    <textarea readOnly value={harnessProposal.proposed_addition} rows={4} />
+                  </label>
+                  <label>
+                    Proposed full instructions
+                    <textarea readOnly value={harnessProposal.proposed_instructions} rows={8} />
+                  </label>
+                  <p className="dim">Validation gate: {harnessProposal.validation_gate}</p>
+                  <p className="dim">Regression validation: {harnessProposal.validation.status}</p>
+                  <button
+                    className="primary"
+                    onClick={() =>
+                      act(async () => {
+                        await api.createHarnessProposal(harnessProposal.key, "settings-admin");
+                        setHarnessProposals(await api.harnessProposals());
+                        setFeatureNotice("Harness proposal submitted for review.");
+                      }, false)
+                    }
+                  >
+                    Create review
+                  </button>
+                </div>
+              )}
+              <div className="proposal-preview">
+                <h3>Harness proposal reviews</h3>
+                {harnessProposals.length === 0 ? (
+                  <div className="empty">No harness proposals yet.</div>
+                ) : (
+                  <table className="grid">
+                    <thead>
+                      <tr>
+                        <th>Proposal</th>
+                        <th>Status</th>
+                        <th>Target</th>
+                        <th>Review</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {harnessProposals.slice(0, 8).map((proposal) => (
+                        <tr key={proposal.id}>
+                          <td>
+                            <strong>{proposal.title}</strong>
+                            <div className="dim">{proposal.validation_gate}</div>
+                          </td>
+                          <td><span className={`badge ${proposal.status}`}>{proposal.status}</span></td>
+                          <td>{proposal.target_slug}</td>
+                          <td>
+                            {proposal.status === "pending" ? (
+                              <div className="form-row">
+                                <button
+                                  onClick={() =>
+                                    act(async () => {
+                                      setHarnessValidation(await api.validateHarnessProposal(proposal.id));
+                                    }, false)
+                                  }
+                                >
+                                  Validate
+                                </button>
+                                <button
+                                  className="success"
+                                  onClick={() =>
+                                    act(async () => {
+                                      await api.approveHarnessProposal(proposal.id, "settings-reviewer");
+                                      setHarnessProposals(await api.harnessProposals());
+                                      setAgentSkills(await api.agentSkills(true));
+                                      setFeatureNotice("Harness proposal approved and applied.");
+                                    }, false)
+                                  }
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  className="danger"
+                                  onClick={() =>
+                                    act(async () => {
+                                      await api.rejectHarnessProposal(proposal.id, "settings-reviewer");
+                                      setHarnessProposals(await api.harnessProposals());
+                                      setFeatureNotice("Harness proposal rejected.");
+                                    }, false)
+                                  }
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="dim">{proposal.reviewed_by ?? "reviewed"}</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              {harnessValidation && (
+                <div className="proposal-preview">
+                  <h3>Regression validation</h3>
+                  <div className="form-row">
+                    <span className={`badge ${harnessValidation.validation.status === "passed" ? "approved" : "rejected"}`}>
+                      {harnessValidation.validation.status}
+                    </span>
+                    <span className={`badge ${harnessValidation.current_target_matches_proposal ? "approved" : "rejected"}`}>
+                      {harnessValidation.current_target_matches_proposal ? "target current" : "target changed"}
+                    </span>
+                  </div>
+                  <p className="dim">{harnessValidation.validation.gate}</p>
+                  <table className="grid">
+                    <tbody>
+                      {harnessValidation.validation.checks.map((check) => (
+                        <tr key={check.key}>
+                          <td><span className={`badge ${check.passed ? "approved" : "rejected"}`}>{check.passed ? "pass" : "fail"}</span></td>
+                          <td>
+                            <strong>{check.key.replaceAll("_", " ")}</strong>
+                            <div className="dim">{check.detail}</div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
             <div className="form-row" style={{ marginTop: 14 }}>
               <button
                 onClick={() =>
@@ -423,8 +624,10 @@ export default function SettingsPage() {
                     const saved = await api.updateFeatureConfig({
                       automation: featureConfig.automation,
                       code_metadata: featureConfig.code_metadata,
+                      harness_improvement: featureConfig.harness_improvement,
                     });
                     setFeatureConfig(saved);
+                    setHarnessInsights(await api.harnessImprovementInsights());
                     setFeatureNotice("Feature settings saved.");
                   }, false)
                 }
