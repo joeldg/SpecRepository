@@ -103,14 +103,22 @@ export default function FeedbackPage() {
                   <td>
                     <StatusBadge status={c.error_type} />
                   </td>
-                  <td className="mono click" onClick={() => navigate(`/specs/${c.spec_id}`)}>{c.filename}</td>
+                  <td className="mono">
+                    {c.spec_id ? (
+                      <span className="click" onClick={() => navigate(`/specs/${c.spec_id}`)}>{c.filename}</span>
+                    ) : (
+                      <span className="dim">— (guidance gap: {c.project_type_name ?? "unknown type"})</span>
+                    )}
+                  </td>
                   <td className="feedback-desc dim">{c.sample_description}</td>
                   <td className="faint">{timeAgo(c.latest_at)}</td>
                   <td>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      <button disabled={drafting === c.key} onClick={() => draftClusterFix(c.key)}>
-                        {drafting === c.key ? "Drafting..." : "Draft fix"}
-                      </button>
+                      {c.spec_id && (
+                        <button disabled={drafting === c.key} onClick={() => draftClusterFix(c.key)}>
+                          {drafting === c.key ? "Drafting..." : "Draft fix"}
+                        </button>
+                      )}
                       {filter === "open" && <button onClick={() => setClusterStatus(c.key, "acknowledged")}>Ack cluster</button>}
                       {filter !== "resolved" && <button onClick={() => setClusterStatus(c.key, "resolved")}>Resolve cluster</button>}
                     </div>
@@ -148,9 +156,13 @@ export default function FeedbackPage() {
                   <StatusBadge status={f.error_type} />
                 </td>
                 <td className="mono">
-                  <Link to={`/specs/${f.spec_id}`} style={{ textDecoration: "underline" }}>
-                    {f.filename}
-                  </Link>
+                  {f.spec_id ? (
+                    <Link to={`/specs/${f.spec_id}`} style={{ textDecoration: "underline" }}>
+                      {f.filename}
+                    </Link>
+                  ) : (
+                    <span className="dim">— (guidance gap: {f.project_type_name ?? "unknown type"})</span>
+                  )}
                 </td>
                 <td className="mono">{f.spec_version}</td>
                 <td className="mono dim">{f.agent_identifier}</td>
@@ -163,7 +175,7 @@ export default function FeedbackPage() {
                 <td className="faint">{timeAgo(f.created_at)}</td>
                 <td>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {f.status !== "resolved" && (
+                    {f.status !== "resolved" && f.spec_id && (
                       <button className="primary" disabled={drafting === f.id} onClick={() => draftFix(f.id)}>
                         {drafting === f.id ? "Drafting…" : "Draft AI fix"}
                       </button>

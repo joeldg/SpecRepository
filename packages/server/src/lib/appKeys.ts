@@ -1,4 +1,5 @@
 import type { Db } from "../db.js";
+import { decryptSecret, encryptSecret } from "./secretCrypto.js";
 
 export interface AppKeyConfig {
   github_token: string;
@@ -22,11 +23,16 @@ function readSetting(db: Db, key: string): string | undefined {
   return (db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string } | undefined)?.value;
 }
 
+function readSecretSetting(db: Db, key: string): string | undefined {
+  const value = readSetting(db, key);
+  return value ? decryptSecret(value) : value;
+}
+
 export function getAppKeyConfig(db: Db): AppKeyConfig {
   return {
-    github_token: readSetting(db, KEYS.github_token) || process.env.GITHUB_TOKEN || "",
-    github_webhook_secret: readSetting(db, KEYS.github_webhook_secret) || process.env.GITHUB_WEBHOOK_SECRET || "",
-    slack_signing_secret: readSetting(db, KEYS.slack_signing_secret) || process.env.SLACK_SIGNING_SECRET || "",
+    github_token: readSecretSetting(db, KEYS.github_token) || process.env.GITHUB_TOKEN || "",
+    github_webhook_secret: readSecretSetting(db, KEYS.github_webhook_secret) || process.env.GITHUB_WEBHOOK_SECRET || "",
+    slack_signing_secret: readSecretSetting(db, KEYS.slack_signing_secret) || process.env.SLACK_SIGNING_SECRET || "",
   };
 }
 
@@ -65,8 +71,8 @@ export function saveAppKeyConfig(
   if (input.clear_slack_signing_secret) next.slack_signing_secret = "";
 
   const upsert = db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)");
-  upsert.run(KEYS.github_token, next.github_token);
-  upsert.run(KEYS.github_webhook_secret, next.github_webhook_secret);
-  upsert.run(KEYS.slack_signing_secret, next.slack_signing_secret);
+  upsert.run(KEYS.github_token, encryptSecret(next.github_token));
+  upsert.run(KEYS.github_webhook_secret, encryptSecret(next.github_webhook_secret));
+  upsert.run(KEYS.slack_signing_secret, encryptSecret(next.slack_signing_secret));
   return next;
 }

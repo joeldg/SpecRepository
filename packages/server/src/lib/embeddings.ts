@@ -4,6 +4,7 @@ import type { Db } from "../db.js";
 import { now } from "../db.js";
 import { HttpError } from "../helpers.js";
 import { sectionAnchor, splitSections } from "./sections.js";
+import { decryptSecret, encryptSecret } from "./secretCrypto.js";
 
 export type EmbeddingProvider = "local_hash" | "openai" | "gemini" | "openai_compatible";
 
@@ -68,7 +69,7 @@ export function getEmbeddingConfig(db: Db): EmbeddingConfig {
             : "local-hash-v1"),
     base_url: map.get(KEYS.base_url) || process.env.EMBEDDING_BASE_URL || "",
     api_key:
-      map.get(KEYS.api_key) ||
+      (map.get(KEYS.api_key) ? decryptSecret(map.get(KEYS.api_key)!) : "") ||
       process.env.EMBEDDING_API_KEY ||
       (provider === "openai"
         ? process.env.OPENAI_API_KEY ?? ""
@@ -98,7 +99,7 @@ export function saveEmbeddingConfig(db: Db, input: Partial<EmbeddingConfig> & { 
   upsert.run(KEYS.provider, next.provider);
   upsert.run(KEYS.model, next.model);
   upsert.run(KEYS.base_url, next.base_url);
-  upsert.run(KEYS.api_key, next.api_key);
+  upsert.run(KEYS.api_key, encryptSecret(next.api_key));
   upsert.run(KEYS.dimensions, String(next.dimensions));
   return next;
 }

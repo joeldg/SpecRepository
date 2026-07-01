@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Db } from "../db.js";
 import { HttpError } from "../helpers.js";
+import { decryptSecret, encryptSecret } from "./secretCrypto.js";
 
 export type LlmProvider = "anthropic" | "openai" | "gemini" | "openai_compatible";
 
@@ -191,7 +192,7 @@ export function getLlmConfig(db: Db): LlmConfig {
             : "llama3.1"),
     base_url: settings.get(KEYS.base_url) || process.env.LLM_BASE_URL || "",
     api_key:
-      settings.get(KEYS.api_key) ||
+      (settings.get(KEYS.api_key) ? decryptSecret(settings.get(KEYS.api_key)!) : "") ||
       process.env.LLM_API_KEY ||
       (normalizedProvider === "anthropic"
         ? process.env.ANTHROPIC_API_KEY ?? ""
@@ -250,7 +251,7 @@ export function getLlmTierConfig(db: Db, tier: LlmTier): LlmConfig {
     provider: normalizedProvider,
     model: map.get(tierKey(tier, "model")) || fallback.model,
     base_url: map.get(tierKey(tier, "base_url")) || fallback.base_url,
-    api_key: map.get(tierKey(tier, "api_key")) || fallback.api_key,
+    api_key: (map.get(tierKey(tier, "api_key")) ? decryptSecret(map.get(tierKey(tier, "api_key"))!) : "") || fallback.api_key,
     max_tokens: Math.max(1, Number(map.get(tierKey(tier, "max_tokens")) || fallback.max_tokens)),
   };
 }
@@ -313,7 +314,7 @@ export function saveLlmConfig(
   upsert.run(KEYS.provider, next.provider);
   upsert.run(KEYS.model, next.model);
   upsert.run(KEYS.base_url, next.base_url);
-  upsert.run(KEYS.api_key, next.api_key);
+  upsert.run(KEYS.api_key, encryptSecret(next.api_key));
   upsert.run(KEYS.max_tokens, String(next.max_tokens));
   return next;
 }
@@ -343,7 +344,7 @@ export function saveLlmTierConfig(
   upsert.run(tierKey(tier, "provider"), next.provider);
   upsert.run(tierKey(tier, "model"), next.model);
   upsert.run(tierKey(tier, "base_url"), next.base_url);
-  upsert.run(tierKey(tier, "api_key"), next.api_key);
+  upsert.run(tierKey(tier, "api_key"), encryptSecret(next.api_key));
   upsert.run(tierKey(tier, "max_tokens"), String(next.max_tokens));
   if (tier === "standard") saveLlmConfig(db, { ...next, clear_api_key: input.clear_api_key });
   return next;

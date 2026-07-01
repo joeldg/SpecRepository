@@ -225,20 +225,25 @@ export async function runMcpServer(opts: McpServerOptions): Promise<void> {
 
   server.tool(
     "report_spec_feedback",
-    "Report an ambiguity, contradiction, or outdated guidance you found in a specification while executing a task. This flags the spec for human review — use it instead of guessing.",
+    "Report an ambiguity, contradiction, or outdated guidance in a specification, OR (error_type: missing_guidance) a pure coverage gap where resolve_guidance found nothing at all — no spec_id needed for a gap, just project_type plus languages and/or topic. Use this instead of guessing or inventing a standard.",
     {
-      spec_id: z.string().describe("The spec's id (from get_specs results)"),
-      error_type: z.enum(["ambiguity", "contradiction", "outdated"]),
-      description: z.string().describe("What is wrong, specifically, and what you needed instead"),
+      spec_id: z.string().optional().describe("The spec's id (from get_specs results). Omit for error_type 'missing_guidance'."),
+      error_type: z.enum(["ambiguity", "contradiction", "outdated", "missing_guidance"]),
+      description: z.string().describe("What is wrong or missing, specifically, and what you needed instead"),
       context_code_snippet: z.string().optional().describe("Relevant code or spec excerpt"),
       agent_identifier: z.string().optional().describe("Your model/agent name"),
+      project_type: z.string().optional().describe("Required for 'missing_guidance' when spec_id is omitted. Defaults to the repo's configured type."),
+      languages: z.array(z.string()).optional().describe("For 'missing_guidance': languages with no coverage, e.g. ['Go', 'Rust']."),
+      topic: z.string().optional().describe("For 'missing_guidance': the uncovered domain/topic, e.g. 'authentication'."),
     },
     async (input) => {
+      const project_type = input.project_type ?? defaultType;
       const created = await api(opts.server, opts.token, "/api/v1/ai/feedback", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           ...input,
+          project_type,
           agent_identifier: input.agent_identifier ?? "mcp-agent",
         }),
       });

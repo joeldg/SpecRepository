@@ -122,9 +122,9 @@ export interface ReviewSlaSummary {
   >;
 }
 export type FeedbackRow = AgentFeedback & {
-  filename: string;
-  current_version: string;
-  project_type_name: string;
+  filename: string | null;
+  current_version: string | null;
+  project_type_name: string | null;
 };
 export type SubscriptionRow = RepoSubscription & { project_type_name: string };
 export type SyncJobRow = SyncJob & { repo: string; branch: string; filename: string };
@@ -436,9 +436,9 @@ export interface ApprovalPolicyRow {
 }
 export interface FeedbackCluster {
   key: string;
-  spec_id: string;
-  filename: string;
-  project_type_name: string;
+  spec_id: string | null;
+  filename: string | null;
+  project_type_name: string | null;
   error_type: string;
   count: number;
   status_counts: Record<string, number>;

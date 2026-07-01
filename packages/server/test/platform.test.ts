@@ -26,6 +26,7 @@ afterEach(async () => {
   delete process.env.SPECREG_PUBLIC_URL;
   delete process.env.SPECREG_AUTH;
   delete process.env.SPECREG_ADMIN_PASSWORD;
+  delete process.env.SPECREG_SECRET_KEY;
 });
 
 async function getJson(target: FastifyInstance, url: string) {
@@ -492,6 +493,47 @@ describe("LDAP settings", () => {
       payload: { groups: ["cn=unknown,dc=example,dc=com"] },
     });
     expect(fallback.json().role).toBe("agent");
+  });
+});
+
+describe("secrets at rest", () => {
+  it("stores the LDAP bind password, GitHub token, and Slack secret encrypted once SPECREG_SECRET_KEY is set, and still reads them back correctly", async () => {
+    process.env.SPECREG_SECRET_KEY = "test-master-key-do-not-use-in-prod";
+
+    await app.inject({
+      method: "PUT",
+      url: "/api/v1/ldap/config",
+      payload: { url: "ldap://directory.example.com", bind_password: "super-secret-bind-pw" },
+    });
+    const rawBindPassword = (app.db.prepare("SELECT value FROM settings WHERE key = 'ldap.bind_password'").get() as { value: string }).value;
+    expect(rawBindPassword).not.toBe("super-secret-bind-pw");
+    expect(rawBindPassword.startsWith("enc:v1:")).toBe(true);
+    const loadedLdap = await getJson(app, "/api/v1/ldap/config");
+    expect(loadedLdap.has_bind_password).toBe(true);
+
+    await app.inject({
+      method: "PUT",
+      url: "/api/v1/app-keys",
+      payload: { github_token: "ghp_supersecrettoken", slack_signing_secret: "slack-secret-value" },
+    });
+    const rawGithubToken = (app.db.prepare("SELECT value FROM settings WHERE key = 'app_keys.github_token'").get() as { value: string }).value;
+    expect(rawGithubToken).not.toBe("ghp_supersecrettoken");
+    expect(rawGithubToken.startsWith("enc:v1:")).toBe(true);
+    const keysLoaded = await getJson(app, "/api/v1/app-keys");
+    expect(keysLoaded.has_github_token).toBe(true);
+    expect(keysLoaded.has_slack_signing_secret).toBe(true);
+
+    delete process.env.SPECREG_SECRET_KEY;
+  });
+
+  it("keeps working without SPECREG_SECRET_KEY (plaintext, unchanged default behavior)", async () => {
+    await app.inject({
+      method: "PUT",
+      url: "/api/v1/ldap/config",
+      payload: { url: "ldap://directory.example.com", bind_password: "plain-bind-pw" },
+    });
+    const raw = (app.db.prepare("SELECT value FROM settings WHERE key = 'ldap.bind_password'").get() as { value: string }).value;
+    expect(raw).toBe("plain-bind-pw");
   });
 });
 

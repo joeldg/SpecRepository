@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { Db } from "../db.js";
 import { now, uuid } from "../db.js";
 import { HttpError } from "../helpers.js";
+import { decryptSecret, encryptSecret } from "./secretCrypto.js";
 
 export type Role = "admin" | "reviewer" | "author" | "agent";
 export const ROLES = ["admin", "reviewer", "author", "agent"] as const satisfies readonly Role[];
@@ -206,11 +207,12 @@ export function getLdapConfig(db: Db): LdapConfig {
   }>;
   const settings = new Map(rows.map((r) => [r.key, r.value]));
   const role = settings.get(LDAP_SETTING_KEYS.default_role) ?? base.default_role;
+  const storedBindPassword = settings.get(LDAP_SETTING_KEYS.bind_password);
   return {
     url: settings.get(LDAP_SETTING_KEYS.url) ?? base.url,
     bind_dn_template: settings.get(LDAP_SETTING_KEYS.bind_dn_template) ?? base.bind_dn_template,
     bind_user: settings.get(LDAP_SETTING_KEYS.bind_user) ?? base.bind_user,
-    bind_password: settings.get(LDAP_SETTING_KEYS.bind_password) ?? base.bind_password,
+    bind_password: storedBindPassword ? decryptSecret(storedBindPassword) : base.bind_password,
     search_base: settings.get(LDAP_SETTING_KEYS.search_base) ?? base.search_base,
     search_filter: settings.get(LDAP_SETTING_KEYS.search_filter) ?? base.search_filter,
     admin_group: settings.get(LDAP_SETTING_KEYS.admin_group) ?? base.admin_group,
@@ -232,7 +234,8 @@ export function saveLdapConfig(db: Db, input: Partial<LdapConfig> & { clear_bind
 
   const upsert = db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)");
   for (const [field, key] of Object.entries(LDAP_SETTING_KEYS) as Array<[keyof LdapConfig, string]>) {
-    upsert.run(key, next[field] ?? "");
+    const value = String(next[field] ?? "");
+    upsert.run(key, field === "bind_password" ? encryptSecret(value) : value);
   }
   return getLdapConfig(db);
 }

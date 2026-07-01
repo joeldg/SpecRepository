@@ -822,6 +822,45 @@ All mutations go through the API layer; the frontend never writes to storage dir
 - \`src/web/main.tsx\` — frontend entry
 `,
   });
+  insertPublishedSpec(db, webId, {
+    filename: "API_ENDPOINTS.md",
+    content: `# Web App Standard — API Endpoint Contract
+
+## Conventions
+All routes are versioned under \`/api/v1\`. Request and response bodies are JSON.
+Successful writes (\`POST\`, \`PUT\`, \`PATCH\`) return the created/updated resource,
+never a raw database row.
+
+## Endpoints
+Add a subsection per route as it is implemented, so code-to-spec traceability has
+something concrete to link against. Example shape:
+
+### \`GET /api/v1/<resource>\`
+- **Auth**: public | Bearer token | admin-only
+- **Query params**: name — purpose
+- **Response**: \`{ ... }\` with a short field description
+
+### \`POST /api/v1/<resource>\`
+- **Auth**: ...
+- **Body**: \`{ ... }\`
+- **Response**: \`201\` with the created resource
+
+## Error Format
+Errors return a JSON body \`{ "message": string }\` with the matching HTTP status:
+400 validation, 401/403 auth, 404 missing resource, 409 conflict, 5xx server error.
+Handlers must not leak stack traces or internal identifiers in error messages.
+
+## Versioning
+A breaking change to a published route (removed field, changed type, changed status
+code) requires a new version path segment or an explicit deprecation window. It must
+not silently change an existing route's contract.
+
+## Non-Goals
+This spec does not cover authentication/session mechanics or database schema; add
+project-scoped specs for those when the project needs governed guidance beyond this
+baseline contract.
+`,
+  });
 
   seedDefaultProjectTypes(db);
 

@@ -79,15 +79,20 @@ CREATE TABLE IF NOT EXISTS approval_policies (
   updated_at TEXT NOT NULL
 );
 
+-- spec_id/spec_version are nullable: a 'missing_guidance' report flags a coverage
+-- gap (no governing spec exists yet) rather than a problem with an existing one.
 CREATE TABLE IF NOT EXISTS agent_feedback (
   id TEXT PRIMARY KEY,
-  spec_id TEXT NOT NULL REFERENCES specs(id),
-  spec_version TEXT NOT NULL,
+  spec_id TEXT REFERENCES specs(id),
+  spec_version TEXT,
   agent_identifier TEXT NOT NULL,
-  error_type TEXT NOT NULL CHECK (error_type IN ('ambiguity', 'contradiction', 'outdated')),
+  error_type TEXT NOT NULL CHECK (error_type IN ('ambiguity', 'contradiction', 'outdated', 'missing_guidance')),
   context_code_snippet TEXT,
   description TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'acknowledged', 'resolved')),
+  project_type_id TEXT REFERENCES project_types(id),
+  languages TEXT,
+  topic TEXT,
   created_at TEXT NOT NULL
 );
 
@@ -603,6 +608,33 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
         updated_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_agent_sessions_repo_time ON agent_sessions(repo, started_at);
+    `,
+  },
+  {
+    // Widen agent_feedback to admit spec_id-less "missing_guidance" gap reports
+    // (SQLite requires a rebuild to relax NOT NULL and widen the error_type CHECK).
+    version: 21,
+    sql: `
+      ALTER TABLE agent_feedback RENAME TO agent_feedback_old;
+      CREATE TABLE agent_feedback (
+        id TEXT PRIMARY KEY,
+        spec_id TEXT REFERENCES specs(id),
+        spec_version TEXT,
+        agent_identifier TEXT NOT NULL,
+        error_type TEXT NOT NULL CHECK (error_type IN ('ambiguity', 'contradiction', 'outdated', 'missing_guidance')),
+        context_code_snippet TEXT,
+        description TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'acknowledged', 'resolved')),
+        project_type_id TEXT REFERENCES project_types(id),
+        languages TEXT,
+        topic TEXT,
+        created_at TEXT NOT NULL
+      );
+      INSERT INTO agent_feedback
+        (id, spec_id, spec_version, agent_identifier, error_type, context_code_snippet, description, status, created_at)
+        SELECT id, spec_id, spec_version, agent_identifier, error_type, context_code_snippet, description, status, created_at
+        FROM agent_feedback_old;
+      DROP TABLE agent_feedback_old;
     `,
   },
 ];

@@ -494,7 +494,10 @@ prior inventory data is available, and includes a code embedding profile for fut
 semantic matching. The extractor uses the TypeScript compiler for TypeScript/JavaScript
 AST entities and lightweight Python/SQL/config extraction for imports, functions, classes,
 routes, commands, config, migrations, tables, fields, and indexes. It does not rewrite
-source files.
+source files. Fuzzy name/path/route text-matching links entities to specs automatically;
+an explicit `// @spec[FILE#section]` comment directly above a declaration overrides that
+guess with a high-confidence link to the named spec (and section, if the anchor matches
+an existing heading) instead.
 
 Use `specreg code-map --report` to upload the traceability report to the registry. The CLI
 uses `--type` or the local `specs/.specregistry.json` manifest to identify the project type.
@@ -963,6 +966,13 @@ Set `LDAP_URL` to authenticate against a directory instead (direct-bind via
 `LDAP_BIND_DN_TEMPLATE`, or service-account search via `LDAP_SEARCH_BASE`/`LDAP_SEARCH_FILTER`);
 map roles with `LDAP_ADMIN_GROUP` / `LDAP_REVIEWER_GROUP`.
 
+Set `SPECREG_SECRET_KEY` to encrypt secrets saved to the database (LDAP bind password, GitHub
+token, webhook/Slack signing secrets, LLM/embedding API keys) at rest, instead of the default
+plaintext storage. The key must come from outside the database (an env var, ideally sourced from
+a secrets manager) so a stolen/leaked SQLite file alone does not also hand over the decryption
+key. Values saved before the key was set keep working as plaintext; new saves encrypt
+automatically once it is configured.
+
 ### Server environment variables
 
 | Variable | Enables |
@@ -1010,6 +1020,7 @@ map roles with `LDAP_ADMIN_GROUP` / `LDAP_REVIEWER_GROUP`.
 | `GITHUB_WEBHOOK_SECRET` | Verify inbound GitHub push webhooks; fallback if not saved in Settings |
 | `SLACK_SIGNING_SECRET` | Verify Slack interactive approve/reject actions; fallback if not saved in Settings |
 | `LDAP_URL` (+ `LDAP_*`) | Optional LDAP authentication |
+| `SPECREG_SECRET_KEY` | Encrypts secrets saved to the database at rest (LDAP bind password, GitHub token, webhook/Slack signing secrets, LLM/embedding API keys). Unset means those settings are stored in plaintext, as before. |
 
 ### Client environment variables
 

@@ -38,6 +38,9 @@ export async function runSubmitDrafts(opts: SubmitDraftsOptions): Promise<void> 
   const created: string[] = [];
   const reviews: string[] = [];
   const skipped: string[] = [];
+  // Tracks entries in `created` that are still drafts (not yet published), so the
+  // closing summary only points at Reviews/Specs when something actually needs it.
+  let createdPendingPublish = 0;
 
   for (const filename of files) {
     const content = fs.readFileSync(path.join(draftDir, filename), "utf8");
@@ -66,6 +69,8 @@ export async function runSubmitDrafts(opts: SubmitDraftsOptions): Promise<void> 
           body: JSON.stringify({ published_by: opts.author }),
         }, opts.token);
         created[created.length - 1] += " (published 1.0.0)";
+      } else {
+        createdPendingPublish++;
       }
       continue;
     }
@@ -85,6 +90,7 @@ export async function runSubmitDrafts(opts: SubmitDraftsOptions): Promise<void> 
         body: JSON.stringify({ content, updated_by: opts.author }),
       }, opts.token);
       created.push(`${filename} -> updated draft ${existing.id}`);
+      createdPendingPublish++;
       continue;
     }
     if (existing.status === "pending_review" && !opts.force) {
@@ -111,5 +117,11 @@ export async function runSubmitDrafts(opts: SubmitDraftsOptions): Promise<void> 
   for (const item of reviews) console.log(`  REVIEW:  ${item}`);
   for (const item of skipped) console.log(`  SKIPPED: ${item}`);
   if (created.length === 0 && reviews.length === 0 && skipped.length === 0) console.log("  No drafts processed.");
-  console.log("\nOpen the registry Reviews and Specs pages to finish review, approval, and publication.");
+
+  const needsReviewOrPublish = reviews.length > 0 || createdPendingPublish > 0;
+  if (needsReviewOrPublish) {
+    console.log("\nOpen the registry Reviews and Specs pages to finish review, approval, and publication.");
+  } else if (created.length > 0) {
+    console.log("\nAll submitted drafts are already published (1.0.0); no further review action is needed.");
+  }
 }

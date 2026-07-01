@@ -4,7 +4,7 @@ export type Scope = "global" | "project_type" | "project";
 export type SpecStatus = "draft" | "pending_review" | "published";
 export type ReviewStatus = "pending" | "approved" | "rejected";
 export type VersionDelta = "major" | "minor" | "patch";
-export type FeedbackErrorType = "ambiguity" | "contradiction" | "outdated";
+export type FeedbackErrorType = "ambiguity" | "contradiction" | "outdated" | "missing_guidance";
 export type FeedbackStatus = "open" | "acknowledged" | "resolved";
 
 export interface ProjectType {
@@ -79,13 +79,20 @@ export interface ChangeRequest {
 
 export interface AgentFeedback {
   id: string;
-  spec_id: string;
-  spec_version: string;
+  /** Null for a "missing_guidance" report: a coverage gap with no spec to attach to. */
+  spec_id: string | null;
+  spec_version: string | null;
   agent_identifier: string;
   error_type: FeedbackErrorType;
   context_code_snippet: string | null;
   description: string;
   status: FeedbackStatus;
+  /** Project type the gap was reported against; only set for spec_id-less reports. */
+  project_type_id: string | null;
+  /** JSON-encoded string[] of languages the gap applies to, if any. */
+  languages: string | null;
+  /** Domain/topic the gap applies to, if any. */
+  topic: string | null;
   created_at: string;
 }
 

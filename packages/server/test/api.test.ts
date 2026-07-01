@@ -44,9 +44,20 @@ describe("project types & specs", () => {
 
   it("lists all specs as summaries with counts", async () => {
     const specs = await getJson("/api/v1/specs");
-    expect(specs.length).toBe(9 + SPECREGISTRY_OPERATING_BASELINE_FILENAMES.length);
+    expect(specs.length).toBe(10 + SPECREGISTRY_OPERATING_BASELINE_FILENAMES.length);
     expect(specs[0]).not.toHaveProperty("content");
     expect(specs[0]).toHaveProperty("open_feedback_count");
+  });
+
+  it("gives Web App Standard an API contract spec so new routes have something to trace against", async () => {
+    const specs = await getJson("/api/v1/specs");
+    const summary = specs.find(
+      (s: any) => s.filename === "API_ENDPOINTS.md" && s.project_type_name === "Web App Standard"
+    );
+    expect(summary).toBeTruthy();
+    expect(summary.status).toBe("published");
+    const spec = await getJson(`/api/v1/specs/${summary.id}`);
+    expect(spec.content).toContain("## Endpoints");
   });
 
   it("seeds the SpecRegistry operating baseline with strict SDD sections", async () => {

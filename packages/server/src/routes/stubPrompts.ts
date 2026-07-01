@@ -197,9 +197,16 @@ export async function stubPromptRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true, project_id: id, repo, project_type: pt.name, specs: specs.length, last_seen_at: ts };
   });
 
-  app.post("/cli/code-trace-report", async (req) => {
+  // Explicit cap on the raw trace payload, independent of Fastify's global default:
+  // `raw_json` persists the whole request body, so an unbounded trace from a huge or
+  // adversarial repo would otherwise land straight in the database. Override via
+  // SPECREG_CODE_TRACE_MAX_BYTES for deployments with unusually large repos.
+  const CODE_TRACE_MAX_BYTES = Number(process.env.SPECREG_CODE_TRACE_MAX_BYTES) || 2 * 1024 * 1024;
+
+  app.post("/cli/code-trace-report", { bodyLimit: CODE_TRACE_MAX_BYTES }, async (req) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const pt = requireProjectType(app.db, requireString(body, "project_type"));
+    const repo = requireString(body, "repo");
     const trace = (typeof body.trace === "object" && body.trace !== null ? body.trace : body) as CodeTracePayload;
     const links = Array.isArray(trace.links) ? trace.links.slice(0, 500) as Array<Record<string, unknown>> : [];
     const unlinked = Array.isArray(trace.unlinked_entities) ? trace.unlinked_entities.slice(0, 50) : [];
@@ -254,12 +261,12 @@ export async function stubPromptRoutes(app: FastifyInstance): Promise<void> {
       }
       return id;
     })();
-    recordUsage(app.db, "sync_check", pt.id, `code-trace:${requireString(body, "repo")}`);
+    recordUsage(app.db, "sync_check", pt.id, `code-trace:${repo}`);
     return {
       ok: true,
       report_id: reportId,
       project_id: consumerId,
-      repo: requireString(body, "repo"),
+      repo,
       project_type: pt.name,
       coverage_ratio: numberValue(trace.coverage?.coverage_ratio),
       drift_score: numberValue(trace.drift?.score),

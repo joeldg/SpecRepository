@@ -105,6 +105,47 @@ test("code inventory extracts AST metadata and stable IDs across supported langu
   assert.notEqual(nextRoute.hash, route.hash);
 });
 
+test("an explicit @spec[FILE#section] annotation short-circuits fuzzy matching with a high-confidence link", () => {
+  const root = makeProject();
+  fs.writeFileSync(
+    path.join(root, "src", "routes", "users.ts"),
+    `import fastify from "fastify";
+
+export function registerRoutes(app: ReturnType<typeof fastify>) {
+  // @spec[API.md#routes]
+  app.get("/users/:id", async (req) => ({ ok: true }));
+
+  // @spec[API.md#nonexistent-section]
+  app.delete("/users/:id", async (req) => ({ ok: true }));
+
+  // @spec[MISSING.md]
+  app.put("/widgets/:id", async (req) => ({ ok: true }));
+}
+`,
+    "utf8"
+  );
+
+  const { trace } = buildCodeInventory(root);
+  const getRoute = trace.links.find((link) => link.entity_name === "GET /users/:id");
+  assert.ok(getRoute);
+  assert.equal(getRoute!.confidence, 1);
+  assert.equal(getRoute!.spec_filename, "API.md");
+  assert.ok(getRoute!.reasons.includes("explicit @spec annotation"));
+  assert.ok(getRoute!.reasons.some((r) => r.includes("section: routes")));
+
+  const deleteRoute = trace.links.find((link) => link.entity_name === "DELETE /users/:id");
+  assert.ok(deleteRoute);
+  assert.equal(deleteRoute!.confidence, 0.9);
+  assert.ok(deleteRoute!.reasons.some((r) => r.includes('section "nonexistent-section" not found')));
+
+  // An annotation pointing at a spec file that doesn't exist falls back to fuzzy
+  // matching (which finds nothing here, since nothing else mentions /widgets/:id)
+  // rather than silently dropping the entity.
+  const putRoute = trace.links.find((link) => link.entity_name === "PUT /widgets/:id");
+  assert.equal(putRoute, undefined);
+  assert.ok(trace.unlinked_entities.some((entity) => entity.name === "PUT /widgets/:id"));
+});
+
 test("code inventory writes a reviewable sidecar without overwriting unless forced", () => {
   const root = makeProject();
   const first = writeCodeInventory({ root, out: ".spec/code-map.json", force: false });

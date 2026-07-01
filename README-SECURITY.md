@@ -108,6 +108,9 @@ internet-reachable deployment:
   the RBAC rank check only guarantees *a* reviewer approved, not a *specific* one.
 - [ ] If you use LDAP, map `LDAP_ADMIN_GROUP`/`LDAP_REVIEWER_GROUP` deliberately; the
   default role for unmapped users is `author`, not `agent` or `admin`.
+- [ ] Set `SPECREG_SECRET_KEY` (from a secrets manager, not checked into the same place
+  as the database) to encrypt the LDAP bind password, GitHub token, webhook/Slack
+  signing secrets, and LLM/embedding API keys at rest instead of storing them plaintext.
 - [ ] Put the server behind TLS termination; tokens are bearer credentials sent over
   plain HTTP otherwise.
 
@@ -116,10 +119,11 @@ internet-reachable deployment:
 These are real limitations as of this writing, verified against the current code, not
 hypothetical. They're tracked in [docs/TODO.md](docs/TODO.md) rather than hidden here:
 
-- **Secrets at rest are plaintext.** LDAP bind password, GitHub token, GitHub/Slack
-  webhook signing secrets, and LLM/embedding provider API keys are all stored
-  unencrypted in the `settings` SQLite table (masked from the browser UI, but not
-  encrypted on disk). A stolen database file exposes all of them.
+- **Secrets at rest are plaintext by default.** LDAP bind password, GitHub token,
+  GitHub/Slack webhook signing secrets, and LLM/embedding provider API keys are masked
+  from the browser UI either way, but are stored unencrypted in the `settings` SQLite
+  table unless `SPECREG_SECRET_KEY` is set — see the hardening checklist above. Without
+  it, a stolen database file exposes all of them.
 - **No login rate limiting.** `POST /api/v1/auth/login` has no throttling or lockout.
   scrypt makes single guesses slow but does not stop a distributed brute-force attempt
   against an internet-reachable secured deployment.

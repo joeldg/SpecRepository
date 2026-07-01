@@ -607,6 +607,48 @@ function extractConfig(root: string, file: string, content: string, entities: Co
   }
 }
 
+const SPEC_ANNOTATION = /@spec\[([^\]#]+)(?:#([a-zA-Z0-9._-]+))?\]/;
+
+/** Mirrors packages/server/src/lib/sections.ts sectionAnchor; kept local so the CLI
+ * doesn't need a runtime dependency on the server package for one slugify function. */
+function sectionAnchor(section: string): string {
+  const base = section
+    .trim()
+    .toLowerCase()
+    .replace(/[`*_~[\]()]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return base || "intro";
+}
+
+/**
+ * Scan a file's raw text for `// @spec[FILE#section]` (or block-comment equivalents)
+ * and attach the reference to the nearest governable entity declared on the next
+ * couple of lines, so an explicit annotation short-circuits the fuzzy text-matching
+ * linker below with a high-confidence, human-authored link.
+ */
+function annotateSpecReferences(content: string, entities: CodeEntity[], relativePath: string): void {
+  const fileEntities = entities
+    .filter((entity) => entity.path === relativePath && governable(entity))
+    .sort((a, b) => a.start_line - b.start_line);
+  if (fileEntities.length === 0) return;
+  const lines = content.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const match = SPEC_ANNOTATION.exec(lines[i]);
+    if (!match) continue;
+    const annotationLine = i + 1;
+    const filename = match[1].trim();
+    const section = match[2]?.trim();
+    const target = fileEntities.find((entity) => entity.start_line >= annotationLine && entity.start_line <= annotationLine + 3);
+    if (!target) continue;
+    target.metadata = {
+      ...(target.metadata ?? {}),
+      spec_ref: section ? `${filename}#${section}` : filename,
+    };
+  }
+}
+
 function loadSpecs(root: string, specsDir: string): SpecReference[] {
   const dir = path.resolve(root, specsDir);
   if (!fs.existsSync(dir)) return [];
@@ -638,7 +680,30 @@ function governable(entity: CodeEntity): boolean {
 
 function linkEntitiesToSpecs(entities: CodeEntity[], specs: SpecReference[]): TraceabilityLink[] {
   const links: TraceabilityLink[] = [];
+  const specByFilename = new Map(specs.map((spec) => [spec.filename.toLowerCase(), spec]));
   for (const entity of entities.filter(governable)) {
+    const specRef = typeof entity.metadata?.spec_ref === "string" ? entity.metadata.spec_ref : undefined;
+    if (specRef) {
+      const [refFilename, refSection] = specRef.split("#");
+      const spec = specByFilename.get(refFilename.trim().toLowerCase());
+      if (spec) {
+        // An explicit annotation is a human assertion, not a heuristic guess: link at
+        // high confidence and skip the fuzzy matching below entirely for this entity.
+        const sectionKnown = !refSection || spec.sections.some((s) => sectionAnchor(s) === refSection.toLowerCase());
+        links.push({
+          entity_id: entity.id,
+          entity_name: entity.name,
+          entity_kind: entity.kind,
+          spec_filename: spec.filename,
+          confidence: sectionKnown ? 1 : 0.9,
+          reasons: [
+            "explicit @spec annotation",
+            ...(refSection ? [sectionKnown ? `section: ${refSection}` : `section "${refSection}" not found in spec`] : []),
+          ],
+        });
+        continue;
+      }
+    }
     const haystacks = specs.map((spec) => ({ spec, text: `${spec.filename}\n${spec.title}\n${spec.sections.join("\n")}\n${spec.content}`.toLowerCase() }));
     const probes = [
       entity.name,
@@ -750,6 +815,7 @@ export function buildCodeInventory(root: string, specsDir = "specs", previous?: 
     } else if (CONFIG_FILENAMES.has(path.basename(file))) {
       extractConfig(resolvedRoot, file, content, entities, fileEntity);
     }
+    annotateSpecReferences(content, entities, fileEntity.path);
   }
   const languages = [...new Set(entities.map((entity) => entity.language))].sort();
   const specs = loadSpecs(resolvedRoot, specsDir);
