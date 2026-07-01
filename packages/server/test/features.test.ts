@@ -70,12 +70,18 @@ Existing. Clarified.
 describe("governed agent skills", () => {
   it("seeds safe base skills and supports admin-managed skill lifecycle", async () => {
     const initial = await getJson("/api/v1/skills");
-    expect(initial.length).toBeGreaterThanOrEqual(6);
+    expect(initial.length).toBeGreaterThanOrEqual(10);
     expect(initial.every((skill: any) => skill.status === "active")).toBe(true);
     expect(initial.find((skill: any) => skill.slug === "load-governed-specs")).toMatchObject({
       built_in: 1,
       risk_level: "safe",
     });
+    // load-governed-specs must point agents at begin_task first (matches AGENT_OPERATING_RULES).
+    expect(initial.find((skill: any) => skill.slug === "load-governed-specs").instructions).toContain("begin_task");
+    // The lifecycle, guidance, compliance-loop, and separation-of-duties skills are seeded safe built-ins.
+    for (const slug of ["register-task-session", "resolve-uncovered-guidance", "run-compliance-loop", "propose-not-publish"]) {
+      expect(initial.find((skill: any) => skill.slug === slug)).toMatchObject({ built_in: 1, risk_level: "safe", status: "active" });
+    }
 
     const created = await app.inject({
       method: "POST",

@@ -637,14 +637,42 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
       DROP TABLE agent_feedback_old;
     `,
   },
+  {
+    // Correct the built-in load-governed-specs skill so it points agents at begin_task
+    // first (matching the AGENT_OPERATING_RULES governed spec). Gated on the exact old
+    // shipped text so an admin who has customized this built-in skill keeps their edit.
+    // New default skills added alongside this ship via seedDefaultAgentSkills (INSERT
+    // OR IGNORE), which runs on every startup.
+    version: 22,
+    sql: `
+      UPDATE agent_skills
+      SET instructions = 'Before non-trivial work, call begin_task to register the session, then use the SpecRegistry MCP get_specs tool for the configured project type and repository to load the governed bundle. Check the local manifest for drift. Treat published specs as authoritative and do not treat drafts as approved guidance.',
+          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE slug = 'load-governed-specs'
+        AND built_in = 1
+        AND instructions = 'Before non-trivial work, use the SpecRegistry MCP get_specs tool for the configured project type and repository. Check the local manifest for drift. Treat published specs as authoritative and do not treat drafts as approved guidance.';
+    `,
+  },
 ];
 
 const DEFAULT_AGENT_SKILLS = [
   {
+    slug: "register-task-session",
+    name: "Register the task session",
+    description: "Open a governed agent session with begin_task before doing non-trivial implementation work.",
+    instructions: "Before non-trivial work, call begin_task with the concrete task, a short plan, the model in use, and the spec files you intend to load. Resolve any returned blockers before editing, follow the declared plan, and keep the returned session_id to pass to finish_task when the work is complete.",
+  },
+  {
     slug: "load-governed-specs",
     name: "Load governed specs",
     description: "Load the current global, project-type, and project-scoped specifications before implementation work.",
-    instructions: "Before non-trivial work, use the SpecRegistry MCP get_specs tool for the configured project type and repository. Check the local manifest for drift. Treat published specs as authoritative and do not treat drafts as approved guidance.",
+    instructions: "Before non-trivial work, call begin_task to register the session, then use the SpecRegistry MCP get_specs tool for the configured project type and repository to load the governed bundle. Check the local manifest for drift. Treat published specs as authoritative and do not treat drafts as approved guidance.",
+  },
+  {
+    slug: "resolve-uncovered-guidance",
+    name: "Resolve uncovered guidance",
+    description: "Pull governed guidance before writing in a language or domain the loaded specs do not cover.",
+    instructions: "Before writing in a language, or working in a domain (networking, authentication, database, deployment) the loaded specs do not clearly cover, call resolve_guidance. Pull the styleguides and specs it returns. If it reports a coverage gap, call report_spec_feedback with error_type missing_guidance plus the relevant languages/topic instead of inventing a standard.",
   },
   {
     slug: "search-spec-context",
@@ -675,6 +703,18 @@ const DEFAULT_AGENT_SKILLS = [
     name: "Collect delivery evidence",
     description: "Record the tests, checks, and operational evidence that support a completed change.",
     instructions: "Summarize commands run, test outcomes, affected specs, known residual risks, and any unverified requirement. Do not claim a check passed unless it was actually executed and its result observed.",
+  },
+  {
+    slug: "run-compliance-loop",
+    name: "Run the compliance loop",
+    description: "Confirm objective compliance before claiming a task is complete, and keep working until it passes.",
+    instructions: "Before declaring a task done, call finish_task with your session_id (or check_compliance, or run specreg comply for CLI/CI). If it is not compliant, keep remediating and re-run — a self-assessed 'done' is not sufficient. Do not report completion while the objective coverage/drift gate still reports outstanding items.",
+  },
+  {
+    slug: "propose-not-publish",
+    name: "Propose, do not self-approve",
+    description: "Propose changes to governed specs through review; never approve or publish your own change.",
+    instructions: "You may create, edit, and publish project-scoped specs for your own enrolled repo, but only propose changes to global and project-type specs through the review workflow. Never approve or publish a change you proposed — approval is a separate human action. Authenticate only as your own enrolled agent identity and stay within the documented MCP tools and the specreg CLI.",
   },
 ] as const;
 
